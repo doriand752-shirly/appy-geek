@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { useMemo, useEffect, useRef, useState } from 'react';
 import {
@@ -15,12 +14,13 @@ import { APP_AD_CONFIG } from '../constants/appAds';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { getMobileAdsReady } from '../utils/mobileAdsInit';
+import { shouldSkipNativeAds } from '../utils/shouldUseNativeAds';
 
 type GoogleMobileAdsModule = typeof import('react-native-google-mobile-ads');
 
 /** Pas d’import statique : obligatoire pour Expo Go (pas de RNGoogleMobileAdsModule). */
 function loadGoogleMobileAds(): GoogleMobileAdsModule | null {
-  if (Constants.executionEnvironment === 'storeClient') return null;
+  if (shouldSkipNativeAds()) return null;
   try {
     return require('react-native-google-mobile-ads') as GoogleMobileAdsModule;
   } catch {

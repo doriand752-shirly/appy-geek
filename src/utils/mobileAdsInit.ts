@@ -1,4 +1,4 @@
-import Constants from 'expo-constants';
+import { shouldSkipNativeAds } from './shouldUseNativeAds';
 
 let readyPromise: Promise<void> | null = null;
 
@@ -6,7 +6,7 @@ let readyPromise: Promise<void> | null = null;
  * Initialise Google Mobile Ads une seule fois (partagé entre bootstrap et bannière).
  */
 export function getMobileAdsReady(): Promise<void> {
-  if (Constants.executionEnvironment === 'storeClient') {
+  if (shouldSkipNativeAds()) {
     return Promise.resolve();
   }
   if (!readyPromise) {
