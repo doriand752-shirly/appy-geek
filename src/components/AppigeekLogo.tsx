@@ -4,7 +4,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { BRAND_GRADIENT } from '../constants/brand';
 
-type AppyGeekLogoMarkProps = {
+type AppigeekLogoMarkProps = {
   /** Côté du carré (px). Défaut 44. */
   size?: number;
 };
@@ -13,9 +13,9 @@ type AppyGeekLogoMarkProps = {
  * Monogramme AG : fond en dégradé (SVG) + lettres en Text natif.
  * Les traits SVG se brouillaient en petit ; le texte système reste net sur Expo Go.
  */
-export const AppyGeekLogoMark = memo(function AppyGeekLogoMark({
+export const AppigeekLogoMark = memo(function AppigeekLogoMark({
   size = 44,
-}: AppyGeekLogoMarkProps) {
+}: AppigeekLogoMarkProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const gradId = `agBg_${uid}`;
   const fs = Math.round(size * 0.4 * 10) / 10;
@@ -25,7 +25,7 @@ export const AppyGeekLogoMark = memo(function AppyGeekLogoMark({
     <View
       style={{ width: size, height: size }}
       accessibilityRole="image"
-      accessibilityLabel="Appy Geek"
+      accessibilityLabel="Appigeek"
     >
       <Svg
         width={size}

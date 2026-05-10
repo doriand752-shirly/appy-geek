@@ -330,7 +330,7 @@ function atomEntryLink(entry: Record<string, unknown>): string {
 export async function fetchAndParseFeed(sub: FeedSubscription): Promise<ParsedArticle[]> {
   const res = await fetch(sub.url, {
     headers: {
-      'User-Agent': 'AppyGeek/1.0 (RSS reader; +https://expo.dev)',
+      'User-Agent': 'Appigeek/1.0 (RSS reader; +https://expo.dev)',
       Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
     },
   });

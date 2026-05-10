@@ -3,7 +3,7 @@
  *
  * | Élément console | Valeur |
  * | --- | --- |
- * | ID d’application (Appy Geek) | `ca-app-pub-5892183761290562~9981862026` → `app.json` (plugin, Android + iOS) |
+ * | ID d’application (Appigeek) | `ca-app-pub-5892183761290562~9981862026` → `app.json` (plugin, Android + iOS) |
  * | Bloc d’annonces « minipub » (bannière) | `ca-app-pub-5892183761290562/6312483860` → `admobBannerUnitId` ci-dessous |
  *
  * Type / taille / emplacement dans l’app : bannière **ancrée adaptative**

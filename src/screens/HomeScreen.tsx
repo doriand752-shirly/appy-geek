@@ -17,8 +17,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ArticleCard } from '../components/ArticleCard';
-import { AppyGeekLogoMark } from '../components/AppyGeekLogo';
-import { AppyGeekWordmark } from '../components/AppyGeekWordmark';
+import { AppigeekLogoMark } from '../components/AppigeekLogo';
+import { AppigeekWordmark } from '../components/AppigeekWordmark';
 import { ThemeCard } from '../components/ThemeCard';
 import { BRAND } from '../constants/brand';
 import { newsThemesWithCustom } from '../constants/newsThemes';
@@ -102,7 +102,7 @@ export function HomeScreen() {
       <View style={styles.lead}>
         <View style={styles.header}>
           <View style={styles.headerTitles}>
-            <AppyGeekWordmark palette={palette} />
+            <AppigeekWordmark palette={palette} />
             <Text style={styles.sub}>
               {BRAND.tagline}
               {lastUpdated
@@ -110,7 +110,7 @@ export function HomeScreen() {
                 : ''}
             </Text>
           </View>
-          <AppyGeekLogoMark size={48} />
+          <AppigeekLogoMark size={48} />
         </View>
         {error ? (
           <View style={styles.banner}>

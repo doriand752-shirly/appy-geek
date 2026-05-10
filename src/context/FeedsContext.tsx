@@ -13,8 +13,8 @@ import { DEFAULT_SUBSCRIPTIONS } from '../constants/suggestedFeeds';
 import type { FeedSubscription, ParsedArticle } from '../types/article';
 import { fetchAndParseFeed } from '../utils/parseFeed';
 
-const STORAGE_SUBS = 'appygeek_subscriptions_v1';
-const STORAGE_READ = 'appygeek_read_ids_v1';
+const STORAGE_SUBS = 'appigeek_subscriptions_v1';
+const STORAGE_READ = 'appigeek_read_ids_v1';
 
 type FeedsContextValue = {
   subscriptions: FeedSubscription[];

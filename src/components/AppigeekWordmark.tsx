@@ -4,18 +4,18 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { AppPalette } from '../constants/theme';
 import { typography } from '../constants/theme';
 
-type AppyGeekWordmarkProps = {
+type AppigeekWordmarkProps = {
   palette: AppPalette;
 };
 
-/** Titre « Appy » en neutre + « Geek » en accent (couleur du thème visuel). */
-export const AppyGeekWordmark = memo(function AppyGeekWordmark({
+/** Titre « Appi » en neutre + « Geek » en accent (couleur du thème visuel). */
+export const AppigeekWordmark = memo(function AppigeekWordmark({
   palette,
-}: AppyGeekWordmarkProps) {
+}: AppigeekWordmarkProps) {
   return (
     <View style={styles.row}>
       <Text style={[styles.base, { color: palette.text }]}>
-        Appy <Text style={[styles.geek, { color: palette.accent }]}>Geek</Text>
+        Appi <Text style={[styles.geek, { color: palette.accent }]}>Geek</Text>
       </Text>
     </View>
   );

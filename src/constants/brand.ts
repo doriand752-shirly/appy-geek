@@ -1,10 +1,10 @@
 /**
- * Identité Appy Geek — couleurs marque (indépendantes des thèmes UI).
+ * Identité Appigeek — couleurs marque (indépendantes des thèmes UI).
  * Le logo conserve ce dégradé pour rester reconnaissable ; le wordmark « Geek »
  * utilise la palette courante (accent) à l’écran.
  */
 export const BRAND = {
-  name: 'Appy Geek',
+  name: 'Appigeek',
   /** Phrase d’accroche affichée sur l’accueil et en bas des réglages */
   tagline: 'Votre veille geek, un flux à la fois',
   /** Dégradé signature du monogramme AG (icône app + logo in-app) */

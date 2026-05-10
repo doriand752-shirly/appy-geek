@@ -20,7 +20,7 @@ import {
 } from '../constants/visualThemes';
 import type { CustomNewsTheme, ReaderDefaultView } from '../types/settings';
 
-const STORAGE_KEY = 'appygeek_app_settings_v1';
+const STORAGE_KEY = 'appigeek_app_settings_v1';
 const CUSTOM_ID_PREFIX = 'custom_';
 const MAX_CUSTOM_THEMES = 50;
 const MAX_CUSTOM_LABEL_LENGTH = 80;

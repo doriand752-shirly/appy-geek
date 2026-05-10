@@ -12,8 +12,8 @@ Phase A — sans Apple Developer Program (maintenant)
 Phase B — compte Apple Developer actif (99 $/an)
 -------------------------------------------------
 Identifiants déjà configurés dans app.json :
-  • iOS bundleIdentifier : com.appygeek.reader
-  • Android package       : com.appygeek.reader  (pour une release Play plus tard)
+  • iOS bundleIdentifier : com.appigeek.reader
+  • Android package       : com.appigeek.reader  (pour une release Play plus tard)
   • buildNumber iOS initial : 1  (EAS production incrémente automatiquement)
   • Chiffrement : usesNonExemptEncryption = false (HTTPS classique uniquement)
 
@@ -23,7 +23,7 @@ Identifiants déjà configurés dans app.json :
    → crée le projet EAS et peut ajouter "extra.eas.projectId" dans app.json
 
 2) Apple : dans developer.apple.com — enregistrer un App ID identique à bundleIdentifier
-   com.appygeek.reader (si pas déjà créé par EAS).
+   com.appigeek.reader (si pas déjà créé par EAS).
 
 3) App Store Connect — créer l’app (nom, langue, bundle id).
 

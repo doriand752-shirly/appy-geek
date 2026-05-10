@@ -7,7 +7,7 @@ import { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppyGeekLogoMark } from '../components/AppyGeekLogo';
+import { AppigeekLogoMark } from '../components/AppigeekLogo';
 import { BRAND } from '../constants/brand';
 import { ALL_THEME_IDS } from '../constants/newsThemes';
 import type { AppPalette } from '../constants/theme';
@@ -142,7 +142,7 @@ export function SettingsScreen() {
         )}
 
         <View style={styles.brandFooter}>
-          <AppyGeekLogoMark size={40} />
+          <AppigeekLogoMark size={40} />
           <View style={styles.brandFooterText}>
             <Text style={[typography.subtitle, { color: palette.text }]}>{BRAND.name}</Text>
             <Text style={[typography.caption, { color: palette.textMuted, marginTop: 4 }]}>
