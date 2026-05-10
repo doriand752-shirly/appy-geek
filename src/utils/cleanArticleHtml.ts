@@ -1,8 +1,17 @@
 /**
- * Retire du HTML d’article des blocs souvent indésirables : barres latérales,
- * formulaires newsletter, listes « à lire aussi », phrases promo récurrentes (FR/EN).
- * Heuristiques — peut parfois retirer du contenu utile si la source utilise les mêmes libellés.
+ * Critères de nettoyage du corps d’article (heuristiques FR/EN — faux positifs possibles).
+ *
+ * - Balises retirées en bloc : `aside`, `nav`, `form`, `svg`, `footer` (pieds injectés dans le corps).
+ * - Blocs dont la `class` contient un fragment « bruit » (`NOISE_CLASS_FRAGMENTS`) sur `div` et `section`.
+ * - Bandeaux digest mobile Presse Citron, titres « Les dernières actualités », « Sur le même sujet », etc.
+ * - Paragraphes courts typés : titre de rubrique seul, promo/newsletter, murs cookies statiques, pubs en capitales.
+ * - Cibles éditoriales : encarts produit / partage / pub Les Numériques & équivalents ; images de notation décoratives.
+ * - Pubs partenaires (Bitdefender, McDo…) : URLs dans les attributs ; blocs « Sponsorisé » ; libellé « Ne plus voir cette pub ».
+ * - `div` / blocs par id : commentaires, Disqus, formulaire de note, `respond`.
+ * - Préparation des images pour RN : `prepareArticleImagesForRn` (importé ici, logique dans son module).
  */
+
+import { prepareArticleImagesForRn } from './prepareArticleImagesForRn';
 
 /** Supprime tous les blocs équilibrés pour une balise donnée (aside, nav, form…). */
 function removeBalancedTagBlocks(html: string, tag: string): string {
@@ -149,6 +158,28 @@ const NOISE_CLASS_FRAGMENTS = [
   'ad--',
   'pub-section',
   'oop_ad',
+  /* Numerama / Humanoid : bons plans, contenus partenaires, in-read */
+  'bons-plans',
+  'bons_plans',
+  'sponsored-article',
+  'article-sponsored',
+  'content-sponsored',
+  'is-sponsored',
+  'partner-block',
+  'brand-content',
+  'native-ad',
+  'inread-ad',
+  'inread_',
+  'affiliate-box',
+  'shop-block',
+  'humanoid-inread',
+  'wp-block-humanoid',
+  /* Encarts « Sponsorisé » / marque (Humanoid, Numerama…) */
+  'contenu-sponsorise',
+  'contenu-sponsoris',
+  'sponsor-label',
+  'native-banner',
+  'brand-partner',
 ];
 
 function escapeRegexClassFragment(s: string): string {
@@ -323,6 +354,91 @@ function findBalancedRange(
     }
   }
   return null;
+}
+
+/**
+ * Marqueurs dans les URLs d’attributs (`src`, `href`, `data-src`…) : encarts partenaires
+ * (Numerama, Humanoid). Pas de test sur le texte seul pour éviter les faux positifs éditoriaux.
+ */
+const PARTNER_AD_URL_MARKERS = [
+  'bitdefender',
+  'mcdonalds',
+  'mcdo.fr',
+  'mcdonalds.fr',
+  'go.mcdonalds',
+  'mcdonalds.com',
+] as const;
+
+function innerLooksLikePartnerAdBlock(inner: string): boolean {
+  const re =
+    /(?:\b(?:src|href|data-(?:src|url|lazy-src)|poster)\s*=\s*["'])([^"']+)/gi;
+  let m;
+  while ((m = re.exec(inner)) !== null) {
+    const val = m[1].toLowerCase();
+    for (const marker of PARTNER_AD_URL_MARKERS) {
+      if (val.includes(marker)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Encart « native » avec mention Sponsorisé + marque ou lien traceur (ex. McDo au milieu d’un article).
+ */
+function innerLooksLikeSponsoredLabelBlock(inner: string): boolean {
+  const plain = stripHtmlInner(inner);
+  if (plain.length > 12_000) return false;
+  const hasSponsorWord =
+    /\b(sponsorisé|sponsor(?:isé|ing)?|contenu sponsorisé|article sponsorisé|partenaire officiel)\b/i.test(
+      plain,
+    ) || /\bsponsored\s+content\b|\bpaid\s+partnership\b/i.test(plain);
+  if (!hasSponsorWord) return false;
+  if (innerLooksLikePartnerAdBlock(inner)) return true;
+  if (/mcdonald|mc\s*do\b|mcdo\.|burger\s*king|subway\.fr|quick\.fr/i.test(plain)) return true;
+  /* Widget court avec uniquement le badge + visuel / CTA */
+  if (plain.length <= 4_500 && /\bsponsorisé\b/i.test(plain)) return true;
+  return false;
+}
+
+function paragraphLooksLikePartnerLinkOnly(innerHtml: string): boolean {
+  const text = stripHtmlInner(innerHtml);
+  if (text.length > 140) return false;
+  return innerLooksLikePartnerAdBlock(innerHtml);
+}
+
+/**
+ * Figures / div / section : pubs partenaires (URLs) ou blocs étiquetés Sponsorisé (McDo, etc.).
+ */
+function removePartnerAdBlocksByUrl(html: string): string {
+  const maxInner = 18_000;
+  const tags = ['figure', 'div', 'section'] as const;
+  let result = html;
+  for (const tag of tags) {
+    let guard = 0;
+    while (guard++ < 450) {
+      const openRe = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
+      let found: { start: number; removeEnd: number } | null = null;
+      let m: RegExpExecArray | null;
+      while ((m = openRe.exec(result)) !== null) {
+        const start = m.index;
+        const contentStart = start + m[0].length;
+        const range = findBalancedRange(result, contentStart, tag);
+        if (!range || range.inner.length > maxInner) continue;
+        const inner = range.inner;
+        if (
+          !innerLooksLikePartnerAdBlock(inner) &&
+          !innerLooksLikeSponsoredLabelBlock(inner)
+        ) {
+          continue;
+        }
+        found = { start, removeEnd: range.afterClose };
+        break;
+      }
+      if (!found) break;
+      result = result.slice(0, found.start) + result.slice(found.removeEnd);
+    }
+  }
+  return result;
 }
 
 /**
@@ -677,6 +793,9 @@ function paragraphLooksLikeCookieConsentWall(innerHtml: string): boolean {
 function paragraphLooksLikeNoise(innerHtml: string): boolean {
   const text = stripHtmlInner(innerHtml);
   if (text.length < 8) return false;
+  if (paragraphLooksLikePartnerLinkOnly(innerHtml)) return true;
+  if (text.length <= 55 && /^(?:publicité\s*)?sponsorisé\.?\s*$/i.test(text.trim())) return true;
+  if (text.length <= 90 && /ne plus voir cette pub/i.test(text)) return true;
   if (paragraphLooksLikeCookieConsentWall(innerHtml)) return true;
   const nt = normalizeHeadingInner(innerHtml);
   if (nt.length <= 200 && digestShortTitleLooksRelated(nt)) return true;
@@ -711,62 +830,6 @@ function removeHtmlComments(html: string): string {
   return html.replace(/<!--[\s\S]*?-->/g, '');
 }
 
-/**
- * Sites comme Les Numériques : `<picture>` avec `<source data-srcset="…">` lazy-load,
- * et `<img src="data:image/svg+xml,…">` vide. Le navigateur hydrate via JS ; React Native
- * ne lit que `src` → il faut recopier une URL réelle (jpg préféré).
- */
-function pickLazyPictureUrl(pictureInner: string): string | null {
-  const segments = pictureInner.split(/(?=<source\b)/i);
-  for (const seg of segments) {
-    if (!/\bdata-img-src-default\b/i.test(seg)) continue;
-    const m = /\bdata-srcset\s*=\s*["']([^"']+)["']/i.exec(seg);
-    if (!m) continue;
-    const u = m[1].trim();
-    if (/^https?:\/\//i.test(u) || u.startsWith('//')) return u.startsWith('//') ? `https:${u}` : u;
-  }
-  const all = [...pictureInner.matchAll(/\bdata-srcset\s*=\s*["']([^"']+)["']/gi)].map((x) => x[1].trim());
-  const jpgs = all.filter((u) => /\.jpe?g(\?|$)/i.test(u));
-  if (jpgs.length) {
-    const u = jpgs[jpgs.length - 1];
-    return u.startsWith('//') ? `https:${u}` : u;
-  }
-  const webps = all.filter((u) => /\.webp/i.test(u));
-  if (webps.length) {
-    const u = webps[webps.length - 1];
-    return u.startsWith('//') ? `https:${u}` : u;
-  }
-  const svgs = all.filter((u) => /\.svg/i.test(u));
-  if (svgs.length) {
-    const u = svgs[0];
-    return u.startsWith('//') ? `https:${u}` : u;
-  }
-  return null;
-}
-
-function hydrateLazyPictureImages(html: string): string {
-  return html.replace(/<picture\b[^>]*>([\s\S]*?)<\/picture>/gi, (full, inner) => {
-    const srcAttr = /<img\b[^>]*\bsrc\s*=\s*["']([^"']*)["']/i.exec(inner);
-    const currentSrc = srcAttr?.[1] ?? '';
-    if (/^https?:\/\//i.test(currentSrc)) {
-      return full;
-    }
-    const url = pickLazyPictureUrl(inner);
-    if (!url) {
-      return full;
-    }
-    const openTag = /^<picture\b[^>]*>/i.exec(full)?.[0] ?? '<picture>';
-    let newInner = inner.replace(/<img\b([^>]*)\/?>/i, (_full: string, attrs: string) => {
-      const withoutSrc = attrs.replace(/\ssrc\s*=\s*["'][^"']*["']/gi, '').trim();
-      const spacer = withoutSrc.length ? ' ' : '';
-      return `<img src="${url}"${spacer}${withoutSrc}>`;
-    });
-    /* `<source>` ne sert plus sans moteur responsive ; évite tout bruit côté rendu. */
-    newInner = newInner.replace(/<source\b[^>]*\/?>/gi, '');
-    return `${openTag}${newInner}</picture>`;
-  });
-}
-
 /** Chaînes vides / espaces entre balises superflues */
 function collapseWhitespace(html: string): string {
   return html
@@ -779,12 +842,14 @@ function collapseWhitespace(html: string): string {
 export function cleanArticleHtml(html: string): string {
   if (!html || html.trim().length < 12) return html;
   let out = removeHtmlComments(html);
-  out = hydrateLazyPictureImages(out);
+  out = prepareArticleImagesForRn(out);
   out = removeBalancedTagBlocks(out, 'aside');
   out = removeBalancedTagBlocks(out, 'nav');
   out = removeBalancedTagBlocks(out, 'form');
+  out = removeBalancedTagBlocks(out, 'footer');
   out = removeBalancedTagBlocks(out, 'svg');
   out = removeNoiseClassBlockElements(out);
+  out = removePartnerAdBlocksByUrl(out);
   out = removeMobileDigestOuterBlocks(out);
   out = removeDigestSectionTitleDivs(out);
   out = removeDigestHeadingBlocks(out);
@@ -801,6 +866,7 @@ export function cleanArticleHtml(html: string): string {
   out = removeCommentRatingBlocksById(out);
   /* seconde passe : blocs imbriqués ou classes révélées après coupes */
   out = removeNoiseClassBlockElements(out);
+  out = removePartnerAdBlocksByUrl(out);
   out = removeCommentRatingBlocksById(out);
   out = removePooolWidgetPlaceholder(out);
   out = collapseWhitespace(out);

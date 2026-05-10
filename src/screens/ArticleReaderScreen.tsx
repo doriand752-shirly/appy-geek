@@ -7,6 +7,7 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -32,14 +33,16 @@ import {
   rssBodyLikelyComplete,
 } from '../utils/articleHtmlMerge';
 import { fetchArticleHtmlFallback } from '../utils/fetchArticleHtmlFallback';
+import { isLikelyDirectImageAssetUrl } from '../utils/imageLinks';
+import { sanitizeArticleHtml } from '../utils/sanitizeArticleHtml';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArticleReader'>;
 
 const WEBVIEW_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-/** Balises non rendues par react-native-render-html (évite les avertissements « non géré »). */
-const RENDER_HTML_IGNORED_TAGS = ['svg', 'source', 'noscript'] as const;
+/** Balises ignorées (les `<picture>` sont converties en `<img>` avant rendu). */
+const RENDER_HTML_IGNORED_TAGS = ['svg', 'noscript'] as const;
 
 /** Références stables : évite les rerenders coûteux de TRenderEngineProvider (voir lib). */
 const RENDER_HTML_IGNORED_TAGS_STABLE = [...RENDER_HTML_IGNORED_TAGS];
@@ -101,7 +104,14 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     rssBody ??
     fetchedHtml ??
     '';
-  const hasFullArticle = hasUsableArticleHtml(displayHtml);
+
+  /** Toujours réappliquer scripts/styles/`cleanArticleHtml` — même si le flux ou le fetch ont déjà filtré. */
+  const articleHtmlForReader = useMemo(
+    () => (displayHtml.trim() ? sanitizeArticleHtml(displayHtml) : ''),
+    [displayHtml],
+  );
+
+  const hasFullArticle = hasUsableArticleHtml(articleHtmlForReader);
   const fromPage = !!fetchedHtml && hasFullArticle;
 
   useEffect(() => {
@@ -142,7 +152,6 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     };
   }, [article, url, rssBody]);
 
-  /** Zone affichée avant mesure réelle — limite les sauts quand width/height HTML manquent (Les Numériques, etc.). */
   const imgPlaceholderDimensions = useMemo(() => {
     const w = Math.max(1, contentWidth);
     return {
@@ -151,13 +160,40 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     };
   }, [contentWidth]);
 
+  const openHtmlExternalLink = useCallback(async (_event: unknown, href: string) => {
+    const raw = href.trim();
+    if (!raw) return;
+    if (isLikelyDirectImageAssetUrl(raw)) return;
+    try {
+      if (/^https?:\/\//i.test(raw)) {
+        await WebBrowser.openBrowserAsync(raw, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+          enableBarCollapsing: true,
+        });
+        return;
+      }
+      const can = await Linking.canOpenURL(raw);
+      if (can) await Linking.openURL(raw);
+      else Alert.alert('Lien non pris en charge');
+    } catch {
+      try {
+        await Linking.openURL(raw);
+      } catch {
+        Alert.alert('Impossible d’ouvrir le lien', raw.length > 140 ? `${raw.slice(0, 140)}…` : raw);
+      }
+    }
+  }, []);
+
   const renderersProps = useMemo(
     () => ({
       img: {
         initialDimensions: imgPlaceholderDimensions,
       },
+      a: {
+        onPress: openHtmlExternalLink,
+      },
     }),
-    [imgPlaceholderDimensions],
+    [imgPlaceholderDimensions, openHtmlExternalLink],
   );
 
   const htmlRenderers = useMemo(
@@ -257,7 +293,10 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     [contentWidth, palette],
   );
 
-  const renderHtmlSource = useMemo(() => ({ html: displayHtml }), [displayHtml]);
+  const renderHtmlSource = useMemo(
+    () => ({ html: articleHtmlForReader }),
+    [articleHtmlForReader],
+  );
 
   const copyLink = useCallback(async () => {
     try {
@@ -396,11 +435,11 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     chapoOk && chapoPlain
       ? chapoPlain.trim()
       : hasFullArticle
-        ? htmlToPlainPreview(displayHtml, 520)
+        ? htmlToPlainPreview(articleHtmlForReader, 520)
         : '';
 
   /** Article HTML disponible : aperçu (chapô / extrait) puis bouton pour le corps complet */
-  if (hasFullArticle && displayHtml && !showFullArticle) {
+  if (hasFullArticle && articleHtmlForReader && !showFullArticle) {
     return (
       <View style={styles.flex}>
         {webModal}
@@ -444,7 +483,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     );
   }
 
-  if (hasFullArticle && displayHtml && showFullArticle) {
+  if (hasFullArticle && articleHtmlForReader && showFullArticle) {
     return (
       <View style={styles.flex}>
         {webModal}

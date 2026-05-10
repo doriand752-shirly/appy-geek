@@ -1,6 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 
+import { MobileAdsBootstrap } from './src/components/MobileAdsBootstrap';
 import { AppSettingsProvider, useAppSettings } from './src/context/AppSettingsContext';
 import { FeedsProvider } from './src/context/FeedsContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -21,6 +22,7 @@ export default function App() {
   return (
     <FeedsProvider>
       <AppSettingsProvider>
+        <MobileAdsBootstrap />
         <NavigationRoot />
       </AppSettingsProvider>
     </FeedsProvider>

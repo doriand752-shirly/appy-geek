@@ -1,6 +1,16 @@
-App Store — étapes après validation du compte Apple Developer
+App Store / builds — sans compte Apple vs avec compte payant
 ===========================================================
 
+Phase A — sans Apple Developer Program (maintenant)
+----------------------------------------------------
+  • Développement local : npm start, expo run:ios sur simulateur si tu as Xcode (macOS).
+  • Android : eas build --platform android (pas besoin du programme Apple).
+  • iOS simulateur cloud : npm run eas:build:ios:sim (profil ios_simulator dans eas.json).
+    → Installe le .tar.gz sur simulateur macOS ; pas d’App Store ni TestFlight sans compte payant.
+  • expo-doctor : npm run doctor — corriger tant que possible avant tout build cloud.
+
+Phase B — compte Apple Developer actif (99 $/an)
+-------------------------------------------------
 Identifiants déjà configurés dans app.json :
   • iOS bundleIdentifier : com.appygeek.reader
   • Android package       : com.appygeek.reader  (pour une release Play plus tard)

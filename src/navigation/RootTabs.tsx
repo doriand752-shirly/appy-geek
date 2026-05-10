@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, BottomTabBar } from '@react-navigation/bottom-tabs';
+import { View } from 'react-native';
 
+import { BottomAdStrip } from '../components/BottomAdStrip';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { DiscoverScreen } from '../screens/DiscoverScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -20,6 +22,12 @@ export function RootTabs() {
   const { palette } = useAppSettings();
   return (
     <Tab.Navigator
+      tabBar={(props) => (
+        <View>
+          <BottomAdStrip />
+          <BottomTabBar {...props} />
+        </View>
+      )}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: palette.accent,

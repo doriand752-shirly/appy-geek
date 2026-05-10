@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View, Image as RNImage } from 'react-nativ
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { remoteImageSource } from '../utils/remoteImageSource';
 
 type Props = {
   label: string;
@@ -30,7 +31,7 @@ export function ThemeCard({ label, imageUri, count, cardWidth, onPress }: Props)
       <View style={[styles.frame, { height: h }]}>
         {imageUri ? (
           <RNImage
-            source={{ uri: imageUri }}
+            source={remoteImageSource(imageUri)}
             style={StyleSheet.absoluteFillObject}
             resizeMode="cover"
           />

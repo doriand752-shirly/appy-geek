@@ -2,10 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Constants from 'expo-constants';
 import { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppyGeekLogoMark } from '../components/AppyGeekLogo';
+import { BRAND } from '../constants/brand';
 import { ALL_THEME_IDS } from '../constants/newsThemes';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
@@ -137,6 +140,22 @@ export function SettingsScreen() {
           'Texte complet (HTML) affiché directement.',
           'newspaper-outline',
         )}
+
+        <View style={styles.brandFooter}>
+          <AppyGeekLogoMark size={40} />
+          <View style={styles.brandFooterText}>
+            <Text style={[typography.subtitle, { color: palette.text }]}>{BRAND.name}</Text>
+            <Text style={[typography.caption, { color: palette.textMuted, marginTop: 4 }]}>
+              {BRAND.tagline}
+            </Text>
+            <Text style={[typography.caption, { color: palette.textMuted, marginTop: 8, opacity: 0.85 }]}>
+              Version{' '}
+              {typeof Constants.expoConfig?.version === 'string'
+                ? Constants.expoConfig.version
+                : '—'}
+            </Text>
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -186,5 +205,18 @@ function createSettingsStyles(palette: AppPalette) {
     optionTitleSelected: { color: palette.text },
     optionHint: { ...typography.caption, color: palette.textMuted, lineHeight: 18 },
     optionSpacer: { width: 22 },
+    brandFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginTop: spacing.xl,
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.md,
+      borderRadius: 14,
+      backgroundColor: palette.surfaceElevated,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    brandFooterText: { flex: 1 },
   });
 }

@@ -17,7 +17,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ArticleCard } from '../components/ArticleCard';
+import { AppyGeekLogoMark } from '../components/AppyGeekLogo';
+import { AppyGeekWordmark } from '../components/AppyGeekWordmark';
 import { ThemeCard } from '../components/ThemeCard';
+import { BRAND } from '../constants/brand';
 import { newsThemesWithCustom } from '../constants/newsThemes';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
@@ -98,16 +101,16 @@ export function HomeScreen() {
     () => (
       <View style={styles.lead}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.brand}>Appy Geek</Text>
+          <View style={styles.headerTitles}>
+            <AppyGeekWordmark palette={palette} />
             <Text style={styles.sub}>
-              Votre veille geek, un flux à la fois
+              {BRAND.tagline}
               {lastUpdated
                 ? ` · MAJ ${new Date(lastUpdated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
                 : ''}
             </Text>
           </View>
-          <Ionicons name="planet-outline" size={28} color={palette.accent} />
+          <AppyGeekLogoMark size={48} />
         </View>
         {error ? (
           <View style={styles.banner}>
@@ -220,7 +223,7 @@ function createHomeStyles(palette: AppPalette) {
       alignItems: 'center',
       justifyContent: 'space-between',
     },
-    brand: { ...typography.title, color: palette.text },
+    headerTitles: { flex: 1, paddingRight: spacing.sm },
     sub: { ...typography.caption, color: palette.textMuted, marginTop: 4 },
     banner: {
       flexDirection: 'row',
