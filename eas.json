@@ -25,6 +25,10 @@
     },
     "ios_simulator": {
       "distribution": "internal",
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_ADMOB_USE_TEST_IDS": "1"
+      },
       "ios": {
         "simulator": true
       }
