@@ -10,6 +10,10 @@
  * (`BannerAdSize.ANCHORED_ADAPTIVE_BANNER`) au-dessus de la barre d’onglets — voir `BottomAdStrip`.
  *
  * En `__DEV__`, **TestIds.BANNER** (annonces de test) sauf si `useProductionBannerInDev` est à `true`.
+ *
+ * Builds **EAS `preview` / `development`** : variable `EXPO_PUBLIC_ADMOB_USE_TEST_IDS=1` dans `eas.json`
+ * pour toujours charger la bannière de **test Google** sur émulateur / sans inventaire réel.
+ * Retire-la sur le profil `preview` si tu veux tester l’unit production en internal.
  * Respect des [Règles AdMob](https://support.google.com/admob/answer/6128543) : pas de libellés
  * trompeurs, pas d’incitation aux clics, emplacement cohérent avec le contenu.
  */

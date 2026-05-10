@@ -2,7 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { useMemo, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { APP_AD_CONFIG } from '../constants/appAds';
 import { spacing, typography } from '../constants/theme';
@@ -25,21 +32,27 @@ function loadGoogleMobileAds(): GoogleMobileAdsModule | null {
  * Fine bande au-dessus de la tab bar : bannière AdMob si le binaire inclut le SDK,
  * sinon lien « maison » (Expo Go ou échec du module).
  */
+function useGoogleTestBannerAds(): boolean {
+  if (typeof __DEV__ !== 'undefined' && __DEV__ && !APP_AD_CONFIG.useProductionBannerInDev) {
+    return true;
+  }
+  return process.env.EXPO_PUBLIC_ADMOB_USE_TEST_IDS === '1';
+}
+
 export function BottomAdStrip() {
   const { palette } = useAppSettings();
+  const { width: windowWidth } = useWindowDimensions();
   const [visible, setVisible] = useState(false);
   const [mobileAdsReady, setMobileAdsReady] = useState(false);
+  const [adLoadFailed, setAdLoadFailed] = useState(false);
   const rolledInitial = useRef(false);
 
   const adsModule = useMemo(() => loadGoogleMobileAds(), []);
+  const bannerWidth = Math.max(200, Math.round(windowWidth - CLOSE_BTN_WIDTH));
 
   const unitId = useMemo(() => {
     if (!adsModule) return APP_AD_CONFIG.admobBannerUnitId;
-    if (
-      typeof __DEV__ !== 'undefined' &&
-      __DEV__ &&
-      !APP_AD_CONFIG.useProductionBannerInDev
-    ) {
+    if (useGoogleTestBannerAds()) {
       return adsModule.TestIds.BANNER;
     }
     return APP_AD_CONFIG.admobBannerUnitId;
@@ -92,14 +105,23 @@ export function BottomAdStrip() {
         <View style={styles.bannerWrap}>
           {!mobileAdsReady ? (
             <ActivityIndicator color={palette.textMuted} style={styles.loader} />
+          ) : adLoadFailed ? (
+            <Text
+              style={[styles.adPlaceholder, { color: palette.textMuted }]}
+              numberOfLines={2}
+            >
+              Espace publicitaire — annonce indisponible pour le moment
+            </Text>
           ) : (
             <BannerAd
               unitId={unitId}
+              width={bannerWidth}
               size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
               requestOptions={{
                 requestNonPersonalizedAdsOnly: false,
               }}
-              onAdFailedToLoad={() => setVisible(false)}
+              onAdLoaded={() => setAdLoadFailed(false)}
+              onAdFailedToLoad={() => setAdLoadFailed(true)}
             />
           )}
         </View>
@@ -142,7 +164,17 @@ export function BottomAdStrip() {
   );
 }
 
+/** Largeur réservée au bouton fermer à droite (aligné sur le padding du bouton). */
+const CLOSE_BTN_WIDTH = 52;
+
 const styles = StyleSheet.create({
+  adPlaceholder: {
+    ...typography.caption,
+    fontSize: 12,
+    textAlign: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
   nativeRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

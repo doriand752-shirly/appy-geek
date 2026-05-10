@@ -6,6 +6,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ADMOB_USE_TEST_IDS": "1"
+      },
       "ios": {
         "simulator": true
       }
@@ -13,7 +16,8 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_ADMOB_USE_TEST_IDS": "1"
       },
       "ios": {
         "simulator": false
