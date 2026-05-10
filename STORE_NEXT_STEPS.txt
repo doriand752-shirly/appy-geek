@@ -1,0 +1,33 @@
+App Store — étapes après validation du compte Apple Developer
+===========================================================
+
+Identifiants déjà configurés dans app.json :
+  • iOS bundleIdentifier : com.appygeek.reader
+  • Android package       : com.appygeek.reader  (pour une release Play plus tard)
+  • buildNumber iOS initial : 1  (EAS production incrémente automatiquement)
+  • Chiffrement : usesNonExemptEncryption = false (HTTPS classique uniquement)
+
+1) Compte Expo (gratuit) + lien du projet
+   npm run eas:login
+   npm run eas:init
+   → crée le projet EAS et peut ajouter "extra.eas.projectId" dans app.json
+
+2) Apple : dans developer.apple.com — enregistrer un App ID identique à bundleIdentifier
+   com.appygeek.reader (si pas déjà créé par EAS).
+
+3) App Store Connect — créer l’app (nom, langue, bundle id).
+
+4) Build production iOS (sur les serveurs Expo, certificats gérés par EAS au premier build)
+   npm run eas:build:ios
+
+5) Soumission TestFlight / App Store
+   npm run eas:submit:ios
+   (Apple ID, mot de passe app-specific si A2F, équipe… demandés à l’exécution)
+
+A prévoir côté App Store Connect (pas dans ce dépôt) :
+  • Captures d’écran iPhone (tailles imposées par Apple)
+  • Texte description, mots-clés, catégorie
+  • URL politique de confidentialité (souvent obligatoire)
+  • Questionnaire confidentialité / tracking
+
+Variante : build local Xcode nécessite macOS + CocoaPods — le flux EAS cloud évite ça.

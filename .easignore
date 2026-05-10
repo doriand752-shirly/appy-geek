@@ -1,0 +1,11 @@
+# Réduit la taille du tarball envoyé à EAS Build
+.git
+.github
+*.md
+.vscode
+.idea
+terminals
+coverage
+*.log
+npm-debug.*
+yarn-error.*
