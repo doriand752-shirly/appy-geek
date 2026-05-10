@@ -9,3 +9,8 @@ coverage
 *.log
 npm-debug.*
 yarn-error.*
+
+# Gradle caches (évite fichiers verrouillés + tarball trop lourd pour EAS)
+android/.gradle
+android/app/build
+android/build
