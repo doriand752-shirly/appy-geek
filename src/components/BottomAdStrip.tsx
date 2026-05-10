@@ -28,6 +28,7 @@ function loadGoogleMobileAds(): GoogleMobileAdsModule | null {
 export function BottomAdStrip() {
   const { palette } = useAppSettings();
   const [visible, setVisible] = useState(false);
+  const [mobileAdsReady, setMobileAdsReady] = useState(false);
   const rolledInitial = useRef(false);
 
   const adsModule = useMemo(() => loadGoogleMobileAds(), []);
