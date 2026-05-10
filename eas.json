@@ -12,6 +12,9 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "NODE_ENV": "production"
+      },
       "ios": {
         "simulator": false
       }
@@ -23,6 +26,9 @@
       }
     },
     "production": {
+      "env": {
+        "NODE_ENV": "production"
+      },
       "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
