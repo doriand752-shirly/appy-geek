@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Assistance et contact — Appigeek, votre veille geek en flux RSS." />
+    <title>Appigeek — Assistance</title>
+    <style>
+      :root {
+        --bg: #0c0e14;
+        --surface: #141824;
+        --text: #e8eaf0;
+        --muted: #9aa3b5;
+        --accent-start: #5b47e0;
+        --accent-end: #9d7cff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.55;
+      }
+      .wrap {
+        max-width: 40rem;
+        margin: 0 auto;
+        padding: 2rem 1.25rem 4rem;
+      }
+      h1 {
+        font-size: 1.65rem;
+        font-weight: 700;
+        margin: 0 0 0.35rem;
+        letter-spacing: -0.02em;
+      }
+      .tagline {
+        color: var(--muted);
+        font-size: 0.95rem;
+        margin-bottom: 2rem;
+      }
+      .card {
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 1.25rem 1.35rem;
+        margin-bottom: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      h2 {
+        font-size: 1rem;
+        margin: 0 0 0.65rem;
+        font-weight: 600;
+      }
+      p {
+        margin: 0 0 0.75rem;
+        font-size: 0.95rem;
+      }
+      p:last-child {
+        margin-bottom: 0;
+      }
+      a {
+        color: #b8a8ff;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      a:hover {
+        color: #d4ccff;
+      }
+      .contact-btn {
+        display: inline-block;
+        margin-top: 0.35rem;
+        padding: 0.55rem 1rem;
+        background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+        color: #fff !important;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      .contact-btn:hover {
+        filter: brightness(1.08);
+        color: #fff !important;
+      }
+      footer {
+        margin-top: 2.5rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Appigeek</h1>
+      <p class="tagline">Votre veille geek, un flux à la fois — assistance utilisateur</p>
+
+      <div class="card">
+        <h2>Besoin d’aide ?</h2>
+        <p>
+          Pour un bug, une suggestion ou une question sur l’application, écrivez-nous en précisant votre
+          modèle d’iPhone/iPad et la version iOS si possible.
+        </p>
+        <!-- Remplacez l’adresse ci-dessous par votre email de contact si besoin. -->
+        <a class="contact-btn" href="mailto:dorian172@outlook.com?subject=Appigeek%20-%20Assistance">Contacter le support</a>
+      </div>
+
+      <div class="card">
+        <h2>Avant d’écrire</h2>
+        <p>
+          Les flux RSS sont fournis par des sites tiers : si un flux ne se charge plus, le problème peut venir
+          du site source ou du format du flux. Essayez de retirer puis d’ajouter à nouveau l’URL du flux dans
+          l’app.
+        </p>
+      </div>
+
+      <footer>
+        Page d’assistance pour l’app mobile Appigeek. Dernière mise à jour : <!-- -->2026.
+      </footer>
+    </div>
+  </body>
+</html>

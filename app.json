@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Appigeek",
-    "slug": "appigeek",
+    "slug": "appy-geek",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.appigeek.reader",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "config": {
         "usesNonExemptEncryption": false
       }

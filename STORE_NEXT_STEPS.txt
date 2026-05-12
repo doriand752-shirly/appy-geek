@@ -21,6 +21,8 @@ Identifiants déjà configurés dans app.json :
    npm run eas:login
    npm run eas:init
    → crée le projet EAS et peut ajouter "extra.eas.projectId" dans app.json
+   OK sur ce dépôt : projectId + owner dorian172 ; slug Expo = "appy-geek" (doit
+   correspondre au projet EAS @dorian172/appy-geek, pas "appigeek").
 
 2) Apple : dans developer.apple.com — enregistrer un App ID identique à bundleIdentifier
    com.appigeek.reader (si pas déjà créé par EAS).
@@ -29,6 +31,8 @@ Identifiants déjà configurés dans app.json :
 
 4) Build production iOS (sur les serveurs Expo, certificats gérés par EAS au premier build)
    npm run eas:build:ios
+   Premier build : lancer en mode INTERACTIF (pas --non-interactive) pour qu’EAS
+   crée / valide les certificats Apple (Distribution) avec ton compte développeur.
 
 5) Soumission TestFlight / App Store
    npm run eas:submit:ios
