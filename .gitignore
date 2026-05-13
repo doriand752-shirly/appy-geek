@@ -41,3 +41,6 @@ eas-build-*.log
 # generated native folders
 /ios
 /android
+
+# Dépôt GitHub Pages utilisateur séparé (AdMob app-ads à la racine github.io) — voir dossier /doriand752-shirly.github.io/
+/doriand752-shirly.github.io/
