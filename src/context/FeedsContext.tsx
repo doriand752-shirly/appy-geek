@@ -11,24 +11,41 @@ import React, {
 
 import { DEFAULT_SUBSCRIPTIONS } from '../constants/suggestedFeeds';
 import type { FeedSubscription, ParsedArticle } from '../types/article';
+import { getOfflineCacheCount, syncOfflineArticles } from '../utils/offlineCache';
+import { subscriptionsToOpml } from '../utils/opml';
 import { fetchAndParseFeed } from '../utils/parseFeed';
+import {
+  fixMac4everSubscriptionUrls,
+  missingDefaultFeeds,
+} from '../utils/subscriptionMigration';
+
+import { useAppSettings } from './AppSettingsContext';
 
 const STORAGE_SUBS = 'appigeek_subscriptions_v1';
 const STORAGE_READ = 'appigeek_read_ids_v1';
+const STORAGE_FAVORITES = 'appigeek_favorite_ids_v1';
 
 type FeedsContextValue = {
   subscriptions: FeedSubscription[];
   articles: ParsedArticle[];
   readIds: Set<string>;
+  favoriteIds: Set<string>;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
   lastUpdated: number | null;
+  offlineSyncing: boolean;
+  offlineCachedCount: number;
+  syncOfflineNow: () => Promise<number>;
   refresh: () => Promise<void>;
   addSubscription: (title: string, url: string) => Promise<void>;
   removeSubscription: (id: string) => Promise<void>;
+  importSubscriptions: (feeds: { title: string; url: string }[]) => Promise<number>;
   markRead: (articleId: string) => Promise<void>;
+  markAllRead: (articleIds: string[]) => Promise<void>;
+  toggleFavorite: (articleId: string) => Promise<void>;
   resetToDefaults: () => Promise<void>;
+  getExportOpml: () => string;
 };
 
 const FeedsContext = createContext<FeedsContextValue | null>(null);
@@ -49,11 +66,15 @@ async function stableIdFromUrl(url: string): Promise<string> {
 }
 
 export function FeedsProvider({ children }: { children: React.ReactNode }) {
+  const { offlineCacheEnabled, offlineCacheLimit } = useAppSettings();
   const [subscriptions, setSubscriptions] = useState<FeedSubscription[]>([]);
   const [articles, setArticles] = useState<ParsedArticle[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [offlineSyncing, setOfflineSyncing] = useState(false);
+  const [offlineCachedCount, setOfflineCachedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -62,13 +83,29 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const [rawSubs, rawRead] = await Promise.all([
+        const [rawSubs, rawRead, rawFav] = await Promise.all([
           AsyncStorage.getItem(STORAGE_SUBS),
           AsyncStorage.getItem(STORAGE_READ),
+          AsyncStorage.getItem(STORAGE_FAVORITES),
         ]);
         if (cancelled) return;
         if (rawSubs) {
-          const parsed = JSON.parse(rawSubs) as FeedSubscription[];
+          let parsed = JSON.parse(rawSubs) as FeedSubscription[];
+          const { subs: fixed, changed: urlFixed } = fixMac4everSubscriptionUrls(parsed);
+          parsed = fixed;
+          const toAdd = missingDefaultFeeds(parsed);
+          if (toAdd.length) {
+            for (const f of toAdd) {
+              parsed.push({
+                id: await stableIdFromUrl(f.url),
+                title: f.title,
+                url: f.url,
+              });
+            }
+          }
+          if (urlFixed || toAdd.length) {
+            await AsyncStorage.setItem(STORAGE_SUBS, JSON.stringify(parsed));
+          }
           setSubscriptions(parsed);
         } else {
           const defaults: FeedSubscription[] = await Promise.all(
@@ -84,6 +121,10 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
         if (rawRead) {
           const arr = JSON.parse(rawRead) as string[];
           setReadIds(new Set(arr));
+        }
+        if (rawFav) {
+          const arr = JSON.parse(rawFav) as string[];
+          setFavoriteIds(new Set(arr));
         }
       } catch {
         setError('Impossible de charger vos données locales.');
@@ -106,6 +147,40 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
   const persistRead = async (ids: Set<string>) => {
     await AsyncStorage.setItem(STORAGE_READ, JSON.stringify([...ids]));
   };
+
+  const persistFavorites = async (ids: Set<string>) => {
+    await AsyncStorage.setItem(STORAGE_FAVORITES, JSON.stringify([...ids]));
+  };
+
+  const runOfflineSync = useCallback(
+    async (merged: ParsedArticle[]): Promise<number> => {
+      if (!offlineCacheEnabled) {
+        setOfflineCachedCount(0);
+        return 0;
+      }
+      if (!merged.length) {
+        setOfflineCachedCount(0);
+        return 0;
+      }
+      setOfflineSyncing(true);
+      try {
+        await syncOfflineArticles(merged, offlineCacheLimit);
+        const count = await getOfflineCacheCount();
+        setOfflineCachedCount(count);
+        return count;
+      } catch {
+        return 0;
+      } finally {
+        setOfflineSyncing(false);
+      }
+    },
+    [offlineCacheEnabled, offlineCacheLimit],
+  );
+
+  const syncOfflineNow = useCallback(
+    () => runOfflineSync(articles),
+    [articles, runOfflineSync],
+  );
 
   const refresh = useCallback(async () => {
     if (!subscriptions.length) {
@@ -135,12 +210,19 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
       );
     }
     setRefreshing(false);
-  }, [subscriptions]);
+    void runOfflineSync(merged);
+  }, [subscriptions, runOfflineSync]);
 
   useEffect(() => {
     if (!hydrated) return;
     void refresh();
   }, [hydrated, subscriptions, refresh]);
+
+  /** Synchro quand l’option est activée ou que la limite change (ex. réglages chargés au démarrage). */
+  useEffect(() => {
+    if (!hydrated || !offlineCacheEnabled || !articles.length) return;
+    void runOfflineSync(articles);
+  }, [hydrated, offlineCacheEnabled, offlineCacheLimit, articles, runOfflineSync]);
 
   const addSubscription = useCallback(
     async (title: string, url: string) => {
@@ -155,6 +237,37 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
       const subs = [...subscriptions, next];
       setSubscriptions(subs);
       await persistSubs(subs);
+    },
+    [subscriptions],
+  );
+
+  const importSubscriptions = useCallback(
+    async (feeds: { title: string; url: string }[]) => {
+      let added = 0;
+      const next = [...subscriptions];
+      const seen = new Set(next.map((s) => s.url.toLowerCase()));
+      for (const f of feeds) {
+        try {
+          const normalized = normalizeUrl(f.url);
+          const key = normalized.toLowerCase();
+          if (seen.has(key)) continue;
+          const id = await stableIdFromUrl(normalized);
+          next.push({
+            id,
+            title: f.title.trim() || normalized,
+            url: normalized,
+          });
+          seen.add(key);
+          added += 1;
+        } catch {
+          /* skip invalid */
+        }
+      }
+      if (added > 0) {
+        setSubscriptions(next);
+        await persistSubs(next);
+      }
+      return added;
     },
     [subscriptions],
   );
@@ -179,6 +292,26 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const markAllRead = useCallback(async (articleIds: string[]) => {
+    if (!articleIds.length) return;
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      for (const id of articleIds) next.add(id);
+      void persistRead(next);
+      return next;
+    });
+  }, []);
+
+  const toggleFavorite = useCallback(async (articleId: string) => {
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(articleId)) next.delete(articleId);
+      else next.add(articleId);
+      void persistFavorites(next);
+      return next;
+    });
+  }, []);
+
   const resetToDefaults = useCallback(async () => {
     const defaults: FeedSubscription[] = await Promise.all(
       DEFAULT_SUBSCRIPTIONS.map(async (f) => ({
@@ -190,37 +323,59 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
     setSubscriptions(defaults);
     await persistSubs(defaults);
     setReadIds(new Set());
-    await AsyncStorage.removeItem(STORAGE_READ);
+    setFavoriteIds(new Set());
+    await AsyncStorage.multiRemove([STORAGE_READ, STORAGE_FAVORITES]);
   }, []);
+
+  const getExportOpml = useCallback(
+    () => subscriptionsToOpml(subscriptions),
+    [subscriptions],
+  );
 
   const value = useMemo(
     () => ({
       subscriptions,
       articles,
       readIds,
+      favoriteIds,
       loading,
       refreshing,
       error,
       lastUpdated,
+      offlineSyncing,
+      offlineCachedCount,
+      syncOfflineNow,
       refresh,
       addSubscription,
       removeSubscription,
+      importSubscriptions,
       markRead,
+      markAllRead,
+      toggleFavorite,
       resetToDefaults,
+      getExportOpml,
     }),
     [
       subscriptions,
       articles,
       readIds,
+      favoriteIds,
       loading,
       refreshing,
       error,
       lastUpdated,
+      offlineSyncing,
+      offlineCachedCount,
+      syncOfflineNow,
       refresh,
       addSubscription,
       removeSubscription,
+      importSubscriptions,
       markRead,
+      markAllRead,
+      toggleFavorite,
       resetToDefaults,
+      getExportOpml,
     ],
   );
 
@@ -232,3 +387,4 @@ export function useFeeds(): FeedsContextValue {
   if (!ctx) throw new Error('useFeeds must be used inside FeedsProvider');
   return ctx;
 }
+

@@ -1,4 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -15,11 +18,19 @@ import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { useFeeds } from '../context/FeedsContext';
+import { parseOpml } from '../utils/opml';
 
 export function SubscriptionsScreen() {
   const { palette } = useAppSettings();
   const styles = useMemo(() => createSubscriptionsStyles(palette), [palette]);
-  const { subscriptions, addSubscription, removeSubscription, resetToDefaults } = useFeeds();
+  const {
+    subscriptions,
+    addSubscription,
+    removeSubscription,
+    resetToDefaults,
+    getExportOpml,
+    importSubscriptions,
+  } = useFeeds();
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
 
@@ -44,6 +55,49 @@ export function SubscriptionsScreen() {
       { text: 'Annuler', style: 'cancel' },
       { text: 'Retirer', style: 'destructive', onPress: () => void removeSubscription(id) },
     ]);
+  };
+
+  const exportOpml = async () => {
+    try {
+      const xml = getExportOpml();
+      const path = `${FileSystem.cacheDirectory}appigeek-subscriptions.opml`;
+      await FileSystem.writeAsStringAsync(path, xml, { encoding: FileSystem.EncodingType.UTF8 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path, {
+          mimeType: 'application/xml',
+          dialogTitle: 'Exporter les abonnements (OPML)',
+        });
+      } else {
+        Alert.alert('Export OPML', 'Partage non disponible sur cet appareil.');
+      }
+    } catch {
+      Alert.alert('Export impossible', 'Réessayez dans un instant.');
+    }
+  };
+
+  const importOpml = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['text/xml', 'application/xml', 'text/*', '*/*'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      const xml = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const feeds = parseOpml(xml);
+      if (!feeds.length) {
+        Alert.alert('Import OPML', 'Aucun flux trouvé dans ce fichier.');
+        return;
+      }
+      const added = await importSubscriptions(feeds);
+      Alert.alert(
+        'Import terminé',
+        added > 0
+          ? `${added} flux ajouté${added > 1 ? 's' : ''}.`
+          : 'Tous les flux du fichier étaient déjà présents.',
+      );
+    } catch {
+      Alert.alert('Import impossible', 'Vérifiez que le fichier est un OPML valide.');
+    }
   };
 
   const confirmReset = () => {
@@ -92,6 +146,24 @@ export function SubscriptionsScreen() {
           >
             <Ionicons name="add-circle-outline" size={20} color={palette.onAccent} />
             <Text style={styles.primaryBtnText}>Ajouter le flux</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.sectionLabel}>Sauvegarde OPML</Text>
+        <View style={styles.opmlRow}>
+          <Pressable
+            onPress={() => void exportOpml()}
+            style={({ pressed }) => [styles.opmlBtn, pressed && { opacity: 0.88 }]}
+          >
+            <Ionicons name="share-outline" size={18} color={palette.accent} />
+            <Text style={styles.opmlBtnText}>Exporter</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void importOpml()}
+            style={({ pressed }) => [styles.opmlBtn, pressed && { opacity: 0.88 }]}
+          >
+            <Ionicons name="download-outline" size={18} color={palette.accent} />
+            <Text style={styles.opmlBtnText}>Importer</Text>
           </Pressable>
         </View>
 
@@ -163,6 +235,25 @@ function createSubscriptionsStyles(palette: AppPalette) {
     },
     primaryBtnPressed: { opacity: 0.92 },
     primaryBtnText: { ...typography.subtitle, color: palette.onAccent },
+    opmlRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    opmlBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.xs,
+      paddingVertical: spacing.md,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surface,
+    },
+    opmlBtnText: { ...typography.subtitle, fontSize: 15, color: palette.accent },
     sectionLabel: {
       ...typography.subtitle,
       color: palette.text,

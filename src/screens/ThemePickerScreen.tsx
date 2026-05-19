@@ -40,6 +40,8 @@ export function ThemePickerScreen(_props: Props) {
 
   const activeCount = selectedThemeIds.length;
   const total = ALL_THEME_IDS.length + customThemes.length;
+  const allThemesOff = activeCount === 0;
+  const allThemesOn = total > 0 && activeCount === total;
 
   const submitCustom = useCallback(async () => {
     setAddError(null);
@@ -79,15 +81,23 @@ export function ThemePickerScreen(_props: Props) {
         <View style={styles.actions}>
           <Pressable
             onPress={() => void selectAllThemes()}
-            style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+            style={({ pressed }) => [
+              styles.btn,
+              allThemesOn ? styles.btnPrimary : styles.btnMuted,
+              pressed && styles.btnPressed,
+            ]}
           >
-            <Text style={styles.btnText}>Tout activer</Text>
+            <Text style={allThemesOn ? styles.btnText : styles.btnTextMuted}>Tout activer</Text>
           </Pressable>
           <Pressable
             onPress={() => void clearAllThemes()}
-            style={({ pressed }) => [styles.btn, styles.btnMuted, pressed && styles.btnPressed]}
+            style={({ pressed }) => [
+              styles.btn,
+              allThemesOff ? styles.btnPrimary : styles.btnMuted,
+              pressed && styles.btnPressed,
+            ]}
           >
-            <Text style={styles.btnTextMuted}>Tout désactiver</Text>
+            <Text style={allThemesOff ? styles.btnText : styles.btnTextMuted}>Tout désactiver</Text>
           </Pressable>
         </View>
         <Text style={styles.counter}>
@@ -209,8 +219,10 @@ function createThemePickerStyles(palette: AppPalette) {
       flex: 1,
       paddingVertical: spacing.sm,
       borderRadius: 12,
-      backgroundColor: palette.accent,
       alignItems: 'center',
+    },
+    btnPrimary: {
+      backgroundColor: palette.accent,
     },
     btnMuted: {
       backgroundColor: palette.surfaceElevated,

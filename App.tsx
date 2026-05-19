@@ -1,5 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { MobileAdsBootstrap } from './src/components/MobileAdsBootstrap';
 import { AppSettingsProvider, useAppSettings } from './src/context/AppSettingsContext';
@@ -20,11 +21,13 @@ function NavigationRoot() {
 
 export default function App() {
   return (
-    <FeedsProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <AppSettingsProvider>
-        <MobileAdsBootstrap />
-        <NavigationRoot />
+        <FeedsProvider>
+          <MobileAdsBootstrap />
+          <NavigationRoot />
+        </FeedsProvider>
       </AppSettingsProvider>
-    </FeedsProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -1,5 +1,8 @@
 export type SuggestedFeed = { title: string; url: string };
 
+/** Flux RSS officiel (l’URL /rss renvoie une page HTML). */
+export const MAC4EVER_FEED_URL = 'https://www.mac4ever.com/flux/rss/content/all';
+
 export type GeekTopic = {
   id: string;
   title: string;
@@ -32,7 +35,8 @@ export const GEEK_TOPICS: GeekTopic[] = [
       { title: 'Android MT', url: 'https://www.android-mt.com/feed/' },
       { title: 'BeGeek', url: 'https://www.begeek.fr/feed/' },
       { title: 'iPhon.fr', url: 'https://www.iphon.fr/rss' },
-      { title: 'Mac4ever', url: 'https://www.mac4ever.com/rss' },
+      { title: 'Mac4ever', url: MAC4EVER_FEED_URL },
+      { title: 'Consomac', url: 'https://consomac.fr/rss/consomac.xml' },
       { title: 'Point Gphone', url: 'https://www.pointgphone.com/feed/' },
       { title: 'Ginjfo', url: 'https://www.ginjfo.com/feed/' },
       { title: 'MiniMachines', url: 'https://www.minimachines.net/blog/feed/' },
@@ -139,4 +143,6 @@ export const DEFAULT_SUBSCRIPTIONS: SuggestedFeed[] = [
   { title: 'Numerama', url: 'https://www.numerama.com/feed/' },
   { title: 'jeuxvideo.com', url: 'https://www.jeuxvideo.com/rss/rss.xml' },
   { title: 'Journal du Geek', url: 'https://www.journaldugeek.com/feed/' },
+  { title: 'Mac4ever', url: MAC4EVER_FEED_URL },
+  { title: 'Consomac', url: 'https://consomac.fr/rss/consomac.xml' },
 ];

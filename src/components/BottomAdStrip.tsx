@@ -14,31 +14,13 @@ import { APP_AD_CONFIG } from '../constants/appAds';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { getMobileAdsReady } from '../utils/mobileAdsInit';
-import { shouldSkipNativeAds } from '../utils/shouldUseNativeAds';
-
-type GoogleMobileAdsModule = typeof import('react-native-google-mobile-ads');
-
-/** Pas d’import statique : obligatoire pour Expo Go (pas de RNGoogleMobileAdsModule). */
-function loadGoogleMobileAds(): GoogleMobileAdsModule | null {
-  if (shouldSkipNativeAds()) return null;
-  try {
-    return require('react-native-google-mobile-ads') as GoogleMobileAdsModule;
-  } catch {
-    return null;
-  }
-}
+import { shouldUseGoogleTestAdIds } from '../utils/admobTestIds';
+import { loadGoogleMobileAds } from '../utils/googleMobileAdsModule';
 
 /**
  * Fine bande au-dessus de la tab bar : bannière AdMob si le binaire inclut le SDK,
  * sinon lien « maison » (Expo Go ou échec du module).
  */
-function useGoogleTestBannerAds(): boolean {
-  if (typeof __DEV__ !== 'undefined' && __DEV__ && !APP_AD_CONFIG.useProductionBannerInDev) {
-    return true;
-  }
-  return process.env.EXPO_PUBLIC_ADMOB_USE_TEST_IDS === '1';
-}
-
 export function BottomAdStrip() {
   const { palette } = useAppSettings();
   const { width: windowWidth } = useWindowDimensions();
@@ -52,7 +34,7 @@ export function BottomAdStrip() {
 
   const unitId = useMemo(() => {
     if (!adsModule) return APP_AD_CONFIG.admobBannerUnitId;
-    if (useGoogleTestBannerAds()) {
+    if (shouldUseGoogleTestAdIds()) {
       return adsModule.TestIds.BANNER;
     }
     return APP_AD_CONFIG.admobBannerUnitId;

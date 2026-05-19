@@ -4,6 +4,7 @@ import { NEWS_THEME_BY_ID } from '../constants/newsThemes';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { ArticleReaderScreen } from '../screens/ArticleReaderScreen';
 import { ThemeArticlesScreen } from '../screens/ThemeArticlesScreen';
+import { OfflineArticlesScreen } from '../screens/OfflineArticlesScreen';
 import { ThemePickerScreen } from '../screens/ThemePickerScreen';
 import { RootTabs } from './RootTabs';
 
@@ -14,9 +15,12 @@ export type RootStackParamList = {
     articleId: string;
     url: string;
     title: string;
+    /** HTML préchargé (lecture hors ligne). */
+    offlineHtml?: string;
   };
   ThemeArticles: { themeId: string; themeLabel?: string };
   ThemePicker: undefined;
+  OfflineArticles: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -54,6 +58,11 @@ export function RootNavigator() {
         options={{
           title: 'Thèmes de l’accueil',
         }}
+      />
+      <Stack.Screen
+        name="OfflineArticles"
+        component={OfflineArticlesScreen}
+        options={{ title: 'Articles hors ligne' }}
       />
     </Stack.Navigator>
   );

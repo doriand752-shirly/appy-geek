@@ -11,11 +11,12 @@ type Props = {
   label: string;
   imageUri?: string;
   count: number;
+  unreadCount?: number;
   cardWidth: number;
   onPress: () => void;
 };
 
-export function ThemeCard({ label, imageUri, count, cardWidth, onPress }: Props) {
+export function ThemeCard({ label, imageUri, count, unreadCount = 0, cardWidth, onPress }: Props) {
   const { palette } = useAppSettings();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const h = Math.round(cardWidth * 0.88);
@@ -45,8 +46,10 @@ export function ThemeCard({ label, imageUri, count, cardWidth, onPress }: Props)
           <Text style={styles.label} numberOfLines={2}>
             {label}
           </Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{count}</Text>
+          <View style={[styles.badge, unreadCount > 0 && styles.badgeUnread]}>
+            <Text style={styles.badgeText}>
+              {unreadCount > 0 ? unreadCount : count}
+            </Text>
           </View>
         </View>
       </View>
@@ -99,10 +102,16 @@ function createStyles(palette: AppPalette) {
       textShadowRadius: 4,
     },
     badge: {
-      backgroundColor: palette.accent,
+      backgroundColor: palette.surfaceElevated,
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 8,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    badgeUnread: {
+      backgroundColor: palette.accent,
+      borderColor: palette.accent,
     },
     badgeText: {
       ...typography.caption,

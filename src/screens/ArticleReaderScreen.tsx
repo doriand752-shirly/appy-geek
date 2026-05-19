@@ -22,6 +22,7 @@ import RenderHtml from 'react-native-render-html';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
+import { ArticleFooterAd } from '../components/ArticleFooterAd';
 import { ArticleHtmlImgRenderer } from '../components/ArticleHtmlImgRenderer';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
@@ -71,18 +72,42 @@ function htmlToPlainPreview(html: string, maxChars: number): string {
 }
 
 export function ArticleReaderScreen({ route, navigation }: Props) {
-  const { articleId, url, title } = route.params;
-  const { articles } = useFeeds();
-  const { readerDefaultView, palette } = useAppSettings();
-  const styles = useMemo(() => createArticleReaderStyles(palette), [palette]);
+  const { articleId, url, title, offlineHtml: offlineHtmlParam } = route.params;
+  const { articles, favoriteIds, toggleFavorite } = useFeeds();
+  const { readerDefaultView, readerFontMetrics, palette } = useAppSettings();
+  const styles = useMemo(
+    () => createArticleReaderStyles(palette, readerFontMetrics),
+    [palette, readerFontMetrics],
+  );
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const contentWidth = Math.max(0, width - spacing.md * 2);
 
-  const article = useMemo(
+  const articleFromFeed = useMemo(
     () => articles.find((a) => a.id === articleId),
     [articles, articleId],
   );
+  const [cachedFallback, setCachedFallback] = useState<{
+    article: NonNullable<typeof articleFromFeed>;
+    html: string;
+  } | null>(null);
+
+  const article = articleFromFeed ?? cachedFallback?.article ?? null;
+  const isFavorite = favoriteIds.has(articleId);
+
+  useEffect(() => {
+    if (articleFromFeed || offlineHtmlParam) return;
+    let cancelled = false;
+    void import('../utils/offlineCache').then(({ getCachedArticle }) =>
+      getCachedArticle(articleId).then((rec) => {
+        if (cancelled || !rec) return;
+        setCachedFallback({ article: rec.article, html: rec.html });
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [articleId, articleFromFeed, offlineHtmlParam]);
 
   const rssBody = article?.bodyHtml;
   const chapoPlain = article?.chapoPlain;
@@ -100,9 +125,11 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   const [inlineWebLoading, setInlineWebLoading] = useState(false);
 
   const displayHtml =
-    pickRicherArticleHtml(rssBody, fetchedHtml ?? undefined) ??
-    rssBody ??
-    fetchedHtml ??
+    offlineHtmlParam?.trim() ||
+    cachedFallback?.html?.trim() ||
+    pickRicherArticleHtml(rssBody, fetchedHtml ?? undefined) ||
+    rssBody ||
+    fetchedHtml ||
     '';
 
   /** Toujours réappliquer scripts/styles/`cleanArticleHtml` — même si le flux ou le fetch ont déjà filtré. */
@@ -129,6 +156,11 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!article || !url) return;
+    if (offlineHtmlParam?.trim() || cachedFallback?.html?.trim()) {
+      setFetchLoading(false);
+      setFetchDone(true);
+      return;
+    }
     if (rssBodyLikelyComplete(rssBody)) {
       setFetchLoading(false);
       setFetchDone(true);
@@ -150,7 +182,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [article, url, rssBody]);
+  }, [article, url, rssBody, offlineHtmlParam, cachedFallback?.html]);
 
   const imgPlaceholderDimensions = useMemo(() => {
     const w = Math.max(1, contentWidth);
@@ -207,8 +239,8 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     () => ({
       body: {
         color: palette.text,
-        fontSize: 16,
-        lineHeight: 26,
+        fontSize: readerFontMetrics.bodySize,
+        lineHeight: readerFontMetrics.lineHeight,
       },
       p: { marginTop: 0, marginBottom: spacing.sm },
       h1: {
@@ -290,7 +322,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
         alignSelf: 'center' as const,
       },
     }),
-    [contentWidth, palette],
+    [contentWidth, palette, readerFontMetrics],
   );
 
   const renderHtmlSource = useMemo(
@@ -354,6 +386,18 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     () => (
       <View style={styles.headerRightRow}>
         <Pressable
+          onPress={() => void toggleFavorite(articleId)}
+          hitSlop={12}
+          accessibilityLabel={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          style={styles.headerBtn}
+        >
+          <Ionicons
+            name={isFavorite ? 'bookmark' : 'bookmark-outline'}
+            size={22}
+            color={isFavorite ? palette.accent : palette.accentMuted}
+          />
+        </Pressable>
+        <Pressable
           onPress={() => setWebModalVisible(true)}
           hitSlop={12}
           accessibilityLabel="Page web dans l’app"
@@ -371,7 +415,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
     ),
-    [openArticleMenu, palette, styles],
+    [articleId, isFavorite, openArticleMenu, palette, styles, toggleFavorite],
   );
 
   useEffect(() => {
@@ -478,6 +522,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             <Ionicons name="document-text-outline" size={22} color={palette.text} />
             <Text style={styles.primaryBtnText}>Afficher l’article entier</Text>
           </Pressable>
+          <ArticleFooterAd reloadKey={articleId} />
         </ScrollView>
       </View>
     );
@@ -525,6 +570,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             renderersProps={renderersProps}
             defaultTextProps={RENDER_HTML_DEFAULT_TEXT_PROPS}
           />
+          <ArticleFooterAd reloadKey={articleId} />
         </ScrollView>
       </View>
     );
@@ -601,6 +647,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             {showInlineWeb ? 'Masquer la page sous l’extrait' : 'Afficher la page sous l’extrait'}
           </Text>
         </Pressable>
+        <ArticleFooterAd reloadKey={articleId} />
       </ScrollView>
       {showInlineWeb ? (
         <View style={styles.webSplit}>
@@ -624,7 +671,10 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   );
 }
 
-function createArticleReaderStyles(palette: AppPalette) {
+function createArticleReaderStyles(
+  palette: AppPalette,
+  font: { bodySize: number; lineHeight: number },
+) {
   return StyleSheet.create({
   flex: { flex: 1, backgroundColor: palette.bg },
   flexColumn: { flex: 1, backgroundColor: palette.bg },
@@ -716,7 +766,8 @@ function createArticleReaderStyles(palette: AppPalette) {
   chapoBody: {
     ...typography.body,
     color: palette.text,
-    lineHeight: 26,
+    fontSize: font.bodySize,
+    lineHeight: font.lineHeight,
     marginBottom: spacing.lg,
   },
   toggleBtn: {

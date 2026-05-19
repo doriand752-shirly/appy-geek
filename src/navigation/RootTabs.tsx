@@ -1,13 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator, BottomTabBar } from '@react-navigation/bottom-tabs';
+import { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { BottomAdStrip } from '../components/BottomAdStrip';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useFeeds } from '../context/FeedsContext';
 import { DiscoverScreen } from '../screens/DiscoverScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SubscriptionsScreen } from '../screens/SubscriptionsScreen';
+import { countUnread } from '../utils/articleFilters';
 
 export type RootTabParamList = {
   Accueil: undefined;
@@ -20,6 +23,14 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 
 export function RootTabs() {
   const { palette } = useAppSettings();
+  const { articles, readIds } = useFeeds();
+
+  const homeUnreadBadge = useMemo(() => {
+    const n = countUnread(articles, readIds);
+    if (n <= 0) return undefined;
+    return n > 99 ? '99+' : n;
+  }, [articles, readIds]);
+
   return (
     <Tab.Navigator
       tabBar={(props) => (
@@ -42,6 +53,7 @@ export function RootTabs() {
         name="Accueil"
         component={HomeScreen}
         options={{
+          tabBarBadge: homeUnreadBadge,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
