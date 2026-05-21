@@ -21,6 +21,7 @@ import { ArticleListToolbar } from '../components/ArticleListToolbar';
 import { ArticleSelectionBar } from '../components/ArticleSelectionBar';
 import { AppigeekLogoMark } from '../components/AppigeekLogo';
 import { AppigeekWordmark } from '../components/AppigeekWordmark';
+import { SavedArticlesSection } from '../components/SavedArticlesSection';
 import { SwipeableArticleCard } from '../components/SwipeableArticleCard';
 import { ThemeCard } from '../components/ThemeCard';
 import { BRAND } from '../constants/brand';
@@ -32,6 +33,7 @@ import { useFeeds } from '../context/FeedsContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { RootTabParamList } from '../navigation/RootTabs';
 import type { ParsedArticle } from '../types/article';
+import type { CachedArticleRecord } from '../utils/offlineCache';
 import { type ArticleListFilter, countUnread, filterArticles } from '../utils/articleFilters';
 import { useArticleSelection } from '../hooks/useArticleSelection';
 import { coverUriForTheme, themeIdsForArticle } from '../utils/articleThemes';
@@ -137,16 +139,24 @@ export function HomeScreen() {
   }, [navigation]);
 
   const onOpen = useCallback(
-    async (a: ParsedArticle) => {
+    (a: ParsedArticle, offlineHtml?: string) => {
       if (!a.link) return;
-      await markRead(a.id);
+      void markRead(a.id);
       navigation.navigate('ArticleReader', {
         articleId: a.id,
         url: a.link,
         title: a.title,
+        offlineHtml,
       });
     },
     [markRead, navigation],
+  );
+
+  const onOpenSaved = useCallback(
+    (record: CachedArticleRecord) => {
+      onOpen(record.article, record.html);
+    },
+    [onOpen],
   );
 
   const onOpenTheme = useCallback(
@@ -253,6 +263,7 @@ export function HomeScreen() {
             </View>
           </>
         ) : null}
+        <SavedArticlesSection onOpenArticle={onOpenSaved} />
         <Text style={styles.sectionTitle}>
           Fil d’actualité
           {totalUnread > 0 ? ` · ${totalUnread} non lu${totalUnread > 1 ? 's' : ''}` : ''}
@@ -286,6 +297,7 @@ export function HomeScreen() {
       selectedFeedTitle,
       loading,
       offlineSyncing,
+      onOpenSaved,
       onOpenTheme,
       openThemePicker,
       palette,
@@ -307,6 +319,10 @@ export function HomeScreen() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={listHeader}
           contentContainerStyle={styles.list}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -315,10 +331,15 @@ export function HomeScreen() {
             />
           }
           ListEmptyComponent={
-            loading || refreshing ? (
+            loading && articles.length === 0 ? (
               <View style={styles.empty}>
                 <ActivityIndicator color={palette.accent} />
                 <Text style={styles.emptyText}>Chargement des articles…</Text>
+              </View>
+            ) : refreshing && articles.length === 0 ? (
+              <View style={styles.empty}>
+                <ActivityIndicator color={palette.accent} />
+                <Text style={styles.emptyText}>Actualisation…</Text>
               </View>
             ) : (
               <View style={styles.empty}>

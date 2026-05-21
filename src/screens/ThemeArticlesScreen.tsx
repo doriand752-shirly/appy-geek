@@ -76,9 +76,9 @@ export function ThemeArticlesScreen({ route, navigation }: Props) {
   }, [navigation, resolvedTitle]);
 
   const onOpen = useCallback(
-    async (a: ParsedArticle) => {
+    (a: ParsedArticle) => {
       if (!a.link) return;
-      await markRead(a.id);
+      void markRead(a.id);
       navigation.navigate('ArticleReader', {
         articleId: a.id,
         url: a.link,

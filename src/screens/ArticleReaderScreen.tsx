@@ -7,6 +7,7 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  InteractionManager,
   Linking,
   Modal,
   Platform,
@@ -167,20 +168,35 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
       return;
     }
     let cancelled = false;
-    setFetchLoading(true);
-    void fetchArticleHtmlFallback(url)
-      .then((h) => {
-        if (cancelled) return;
-        if (h) setFetchedHtml(h);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setFetchLoading(false);
-          setFetchDone(true);
-        }
-      });
+    const hasQuickContent =
+      !!offlineHtmlParam?.trim() ||
+      !!cachedFallback?.html?.trim() ||
+      rssBodyLikelyComplete(rssBody) ||
+      hasUsableArticleHtml(rssBody);
+    if (!hasQuickContent) setFetchLoading(true);
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      void fetchArticleHtmlFallback(url)
+        .then((h) => {
+          if (cancelled) return;
+          if (h) setFetchedHtml(h);
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setFetchLoading(false);
+            setFetchDone(true);
+          }
+        });
+    });
+
+    if (hasQuickContent) {
+      setFetchLoading(false);
+      setFetchDone(true);
+    }
+
     return () => {
       cancelled = true;
+      task.cancel();
     };
   }, [article, url, rssBody, offlineHtmlParam, cachedFallback?.html]);
 
@@ -522,7 +538,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             <Ionicons name="document-text-outline" size={22} color={palette.text} />
             <Text style={styles.primaryBtnText}>Afficher l’article entier</Text>
           </Pressable>
-          <ArticleFooterAd reloadKey={articleId} />
+          <ArticleFooterAd key={articleId} reloadKey={articleId} />
         </ScrollView>
       </View>
     );
@@ -570,7 +586,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             renderersProps={renderersProps}
             defaultTextProps={RENDER_HTML_DEFAULT_TEXT_PROPS}
           />
-          <ArticleFooterAd reloadKey={articleId} />
+          <ArticleFooterAd key={articleId} reloadKey={articleId} />
         </ScrollView>
       </View>
     );
@@ -647,7 +663,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             {showInlineWeb ? 'Masquer la page sous l’extrait' : 'Afficher la page sous l’extrait'}
           </Text>
         </Pressable>
-        <ArticleFooterAd reloadKey={articleId} />
+        <ArticleFooterAd key={articleId} reloadKey={articleId} />
       </ScrollView>
       {showInlineWeb ? (
         <View style={styles.webSplit}>

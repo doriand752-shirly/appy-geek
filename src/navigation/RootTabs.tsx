@@ -41,6 +41,8 @@ export function RootTabs() {
       )}
       screenOptions={{
         headerShown: false,
+        lazy: true,
+        freezeOnBlur: true,
         tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.textMuted,
         tabBarStyle: {

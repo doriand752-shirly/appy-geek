@@ -1,14 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { useMemo, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { APP_AD_CONFIG } from '../constants/appAds';
 import { spacing, typography } from '../constants/theme';
@@ -18,15 +11,14 @@ import { shouldUseGoogleTestAdIds } from '../utils/admobTestIds';
 import { loadGoogleMobileAds } from '../utils/googleMobileAdsModule';
 
 /**
- * Fine bande au-dessus de la tab bar : bannière AdMob si le binaire inclut le SDK,
- * sinon lien « maison » (Expo Go ou échec du module).
+ * Fine bande au-dessus de la tab bar : bannière AdMob uniquement si une annonce se charge.
  */
 export function BottomAdStrip() {
   const { palette } = useAppSettings();
   const { width: windowWidth } = useWindowDimensions();
-  const [visible, setVisible] = useState(false);
+  const [slotEligible, setSlotEligible] = useState(false);
+  const [adLoaded, setAdLoaded] = useState(false);
   const [mobileAdsReady, setMobileAdsReady] = useState(false);
-  const [adLoadFailed, setAdLoadFailed] = useState(false);
   const rolledInitial = useRef(false);
 
   const adsModule = useMemo(() => loadGoogleMobileAds(), []);
@@ -52,13 +44,17 @@ export function BottomAdStrip() {
     if (rolledInitial.current) return;
     rolledInitial.current = true;
     if (Math.random() < APP_AD_CONFIG.initialShowProbability) {
-      setVisible(true);
+      setSlotEligible(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!slotEligible) setAdLoaded(false);
+  }, [slotEligible]);
+
+  useEffect(() => {
     const id = setInterval(() => {
-      setVisible((was) => {
+      setSlotEligible((was) => {
         if (was) return was;
         return Math.random() < APP_AD_CONFIG.periodicShowProbability;
       });
@@ -73,48 +69,39 @@ export function BottomAdStrip() {
     });
   };
 
-  if (!visible) return null;
+  if (!slotEligible) return null;
 
   if (adsModule) {
+    if (!mobileAdsReady) return null;
     const { BannerAd, BannerAdSize } = adsModule;
     return (
       <View
         style={[
           styles.nativeRow,
           { backgroundColor: palette.surface, borderTopColor: palette.border },
+          !adLoaded && styles.collapsed,
         ]}
+        pointerEvents={adLoaded ? 'auto' : 'none'}
       >
         <View style={styles.bannerWrap}>
-          {!mobileAdsReady ? (
-            <ActivityIndicator color={palette.textMuted} style={styles.loader} />
-          ) : adLoadFailed ? (
-            <Text
-              style={[styles.adPlaceholder, { color: palette.textMuted }]}
-              numberOfLines={2}
-            >
-              Espace publicitaire — annonce indisponible pour le moment
-            </Text>
-          ) : (
-            <BannerAd
-              unitId={unitId}
-              width={bannerWidth}
-              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-              requestOptions={{
-                requestNonPersonalizedAdsOnly: false,
-              }}
-              onAdLoaded={() => setAdLoadFailed(false)}
-              onAdFailedToLoad={() => setAdLoadFailed(true)}
-            />
-          )}
+          <BannerAd
+            unitId={unitId}
+            width={bannerWidth}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            onAdLoaded={() => setAdLoaded(true)}
+            onAdFailedToLoad={() => setSlotEligible(false)}
+          />
         </View>
-        <Pressable
-          onPress={() => setVisible(false)}
-          hitSlop={10}
-          accessibilityLabel="Masquer cette annonce"
-          style={styles.closeBtn}
-        >
-          <Ionicons name="close" size={22} color={palette.textMuted} />
-        </Pressable>
+        {adLoaded ? (
+          <Pressable
+            onPress={() => setSlotEligible(false)}
+            hitSlop={10}
+            accessibilityLabel="Masquer cette annonce"
+            style={styles.closeBtn}
+          >
+            <Ionicons name="close" size={22} color={palette.textMuted} />
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -135,7 +122,7 @@ export function BottomAdStrip() {
         </Text>
       </Pressable>
       <Pressable
-        onPress={() => setVisible(false)}
+        onPress={() => setSlotEligible(false)}
         hitSlop={10}
         accessibilityLabel="Masquer cette annonce"
         style={styles.closeBtn}
@@ -146,16 +133,15 @@ export function BottomAdStrip() {
   );
 }
 
-/** Largeur réservée au bouton fermer à droite (aligné sur le padding du bouton). */
 const CLOSE_BTN_WIDTH = 52;
 
 const styles = StyleSheet.create({
-  adPlaceholder: {
-    ...typography.caption,
-    fontSize: 12,
-    textAlign: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
+  collapsed: {
+    height: 0,
+    minHeight: 0,
+    overflow: 'hidden',
+    opacity: 0,
+    borderTopWidth: 0,
   },
   nativeRow: {
     flexDirection: 'row',
@@ -169,9 +155,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     minHeight: 50,
-  },
-  loader: {
-    paddingVertical: spacing.sm,
   },
   row: {
     flexDirection: 'row',

@@ -1,3 +1,5 @@
+import { filterOutGenericFeeds } from '../utils/genericFeeds';
+
 export type SuggestedFeed = { title: string; url: string };
 
 /** Flux RSS officiel (l’URL /rss renvoie une page HTML). */
@@ -15,7 +17,7 @@ export type GeekTopic = {
  * Les URLs ont été testées en HTTP 200 ; certaines rédactions (ex. Clubic)
  * n’exposent plus de flux RSS public fiable — elles ne figurent pas ici.
  */
-export const GEEK_TOPICS: GeekTopic[] = [
+const GEEK_TOPICS_RAW: GeekTopic[] = [
   {
     id: 'tech',
     title: 'Tech & numérique',
@@ -137,6 +139,12 @@ export const GEEK_TOPICS: GeekTopic[] = [
     ],
   },
 ];
+
+/** Catalogue Découvrir sans médias généralistes (Le Monde, Libération, etc.). */
+export const GEEK_TOPICS: GeekTopic[] = GEEK_TOPICS_RAW.map((topic) => ({
+  ...topic,
+  feeds: filterOutGenericFeeds(topic.feeds),
+}));
 
 /** Flux pré-abonnés au premier lancement */
 export const DEFAULT_SUBSCRIPTIONS: SuggestedFeed[] = [

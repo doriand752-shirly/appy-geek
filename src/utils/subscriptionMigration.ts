@@ -1,6 +1,7 @@
 import { DEFAULT_SUBSCRIPTIONS, MAC4EVER_FEED_URL } from '../constants/suggestedFeeds';
 import type { FeedSubscription } from '../types/article';
 import type { SuggestedFeed } from '../constants/suggestedFeeds';
+import { isGenericNewsFeed } from './genericFeeds';
 
 const MAC4EVER_LEGACY_PATHS = new Set(['/rss', '/rss/']);
 
@@ -39,6 +40,15 @@ export function fixMac4everSubscriptionUrls(subs: FeedSubscription[]): {
     return s;
   });
   return { subs: next, changed };
+}
+
+/** Retire les médias généralistes (Le Monde, Libération, etc.). */
+export function stripGenericSubscriptions(subs: FeedSubscription[]): {
+  subs: FeedSubscription[];
+  changed: boolean;
+} {
+  const next = subs.filter((s) => !isGenericNewsFeed(s.title, s.url));
+  return { subs: next, changed: next.length !== subs.length };
 }
 
 /** Flux par défaut absents des abonnements (nouvelle install partielle ou MAJ). */

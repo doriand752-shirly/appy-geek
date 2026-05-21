@@ -1,0 +1,98 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.0.2",
+    "copyright": "© 2026 Appi Geek",
+    "release": {
+      "automaticRelease": false
+    },
+    "info": {
+      "fr-FR": {
+        "description": "Appigeek — Votre veille geek, un flux à la fois\n\nMarre de sauter d’un site à l’autre pour suivre la tech, les jeux et la pop culture ? Appigeek rassemble vos flux RSS préférés dans une interface sombre, lisible et pensée pour les passionnés.\n\nLisez comme vous voulez\n\nArticles complets quand le flux le permet, avec récupération intelligente depuis la page web\nAperçu puis article entier, ou lecture directe selon vos réglages\nTaille du texte réglable dans le lecteur\nOuverture de la page source dans l’app ou dans le navigateur\nOrganisez votre fil\n\nRecherche instantanée dans vos articles\nFiltres Tous, Non lus et Favoris\nFiltre par source (Numerama, jeuxvideo.com, Mac4ever…)\nFavoris en un geste\nSwipe pour marquer comme lu, ou sélection multiple pour tout marquer d’un coup\nBadge des non lus sur l’accueil et par thème\nPar thème, à votre façon\n\nTuiles Par thème (tech, jeux, science, pop culture…)\nThèmes personnalisés : créez le vôtre, l’app classe les articles dont le titre correspond\nActivez ou masquez les thèmes selon vos envies\nVos flux, vos règles\n\nCatalogue de flux suggérés + abonnements illimités\nImport / export OPML pour migrer depuis un autre lecteur RSS\nDécouverte et gestion des abonnements intégrées\nHors ligne\n\nTéléchargez les articles complets pour les lire sans connexion\nNombre d’articles en cache réglable dans les paramètres\nArticles sauvegardés visibles sur l’accueil + liste dédiée hors ligne\nFil d’actualité conservé en cache pour un affichage immédiat au lancement\nSoigné, sans friction\n\nPlusieurs thèmes visuels (sombre, clair, couleurs)\nPas de compte obligatoire : vos abonnements et préférences restent sur votre appareil\nInterface en français\nTransparence\n\nL’app peut afficher des publicités (Google AdMob) pour soutenir le développement\nPolitique de confidentialité et assistance : https://appigeek.github.io/\nTéléchargez Appigeek et reprenez le contrôle de votre veille — un flux à la fois.",
+        "keywords": [
+          "RSS",
+          "geek",
+          "tech",
+          "jeux",
+          "actualités",
+          "flux",
+          "lecteur",
+          "offline",
+          "OPML",
+          "Apple",
+          "Mac",
+          "iPhone",
+          "veille",
+          "numerama"
+        ],
+        "releaseNotes": "Version 1.0.2 — plus fluide, plus rapide\n\nAccueil & hors ligne\n\nVos articles sauvegardés (hors ligne) sont visibles directement sur l’accueil\nLe fil se recharge en arrière-plan : vos derniers articles s’affichent tout de suite au lancement\n\nLecture\n\nOuverture d’article nettement plus rapide\nNavigation entre onglets et listes plus fluide\n\nAbonnements\n\nAjout ou retrait d’un flux RSS sans ralentir l’app (traitement en arrière-plan)\nCatalogue Découvrir recentré sur la tech & la pop culture (médias généralistes retirés)\n\nPublicités\n\nNouvelle annonce à chaque article dans le lecteur\nBandeau du bas masqué lorsqu’aucune publicité n’est disponible\n\nMerci de votre confiance — continuez à nous signaler vos retours !",
+        "marketingUrl": "https://appigeek.github.io/",
+        "promoText": "Articles sauvegardés sur l’accueil, ouverture plus rapide, flux RSS sans latence : la veille geek gagne en fluidité.",
+        "supportUrl": "https://appigeek.github.io/",
+        "title": "Appi Geek",
+        "subtitle": "La veille tech pour les geeks",
+        "privacyPolicyUrl": "https://doriand752-shirly.github.io/appy-geek/privacy.html",
+        "screenshots": {
+          "APP_IPAD_PRO_3GEN_11": [
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_11\\IMG_0044.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_11\\IMG_0041.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_11\\IMG_0043.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_11\\IMG_0042.png"
+          ],
+          "APP_IPAD_PRO_3GEN_129": [
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_129\\screen14.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_129\\screen12.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_129\\screen13.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPAD_PRO_3GEN_129\\screen11.png"
+          ],
+          "APP_IPHONE_67": [
+            "store\\apple\\screenshot\\fr-FR\\APP_IPHONE_67\\IMG_3361.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPHONE_67\\IMG_3362.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPHONE_67\\IMG_3363.png",
+            "store\\apple\\screenshot\\fr-FR\\APP_IPHONE_67\\IMG_3364.png"
+          ]
+        }
+      }
+    },
+    "categories": [
+      "NEWS",
+      "MAGAZINES_AND_NEWSPAPERS"
+    ],
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": true,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    },
+    "review": {
+      "firstName": "Dorian",
+      "lastName": "David",
+      "email": "dorian172@outlook.com",
+      "phone": "",
+      "demoRequired": false
+    }
+  }
+}

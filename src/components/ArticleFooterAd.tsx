@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { APP_AD_CONFIG } from '../constants/appAds';
 import { spacing, typography } from '../constants/theme';
@@ -93,15 +86,7 @@ export function ArticleFooterAd({ reloadKey }: Props) {
 
   if (!adsModule) return null;
 
-  if (loading) {
-    return (
-      <View style={[styles.wrap, { borderTopColor: palette.border }]}>
-        <ActivityIndicator color={palette.textMuted} style={styles.loader} />
-      </View>
-    );
-  }
-
-  if (!nativeAd) return null;
+  if (loading || !nativeAd) return null;
 
   const {
     NativeAdView,
@@ -111,7 +96,7 @@ export function ArticleFooterAd({ reloadKey }: Props) {
   } = adsModule;
 
   return (
-    <View style={[styles.wrap, { borderTopColor: palette.border }]}>
+    <View key={reloadKey} style={[styles.wrap, { borderTopColor: palette.border }]}>
       <NativeAdView nativeAd={nativeAd} style={styles.card}>
         <Text style={styles.attribution}>Publicité</Text>
         <NativeMediaView

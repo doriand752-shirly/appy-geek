@@ -48,10 +48,10 @@ export function OfflineArticlesScreen({ navigation }: Props) {
   }, [navigation, load]);
 
   const openArticle = useCallback(
-    async (record: CachedArticleRecord) => {
+    (record: CachedArticleRecord) => {
       const { article } = record;
       if (!article.link) return;
-      await markRead(article.id);
+      void markRead(article.id);
       navigation.navigate('ArticleReader', {
         articleId: article.id,
         url: article.link,

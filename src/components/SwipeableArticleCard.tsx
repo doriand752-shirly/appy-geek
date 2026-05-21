@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RectButton, Swipeable } from 'react-native-gesture-handler';
 
@@ -23,7 +23,7 @@ type Props = {
   onOpenSource?: () => void;
 };
 
-export function SwipeableArticleCard({
+function SwipeableArticleCardInner({
   article,
   read,
   favorite,
@@ -112,6 +112,8 @@ export function SwipeableArticleCard({
     </Swipeable>
   );
 }
+
+export const SwipeableArticleCard = memo(SwipeableArticleCardInner);
 
 function createStyles(palette: AppPalette) {
   return StyleSheet.create({
