@@ -80,11 +80,11 @@
     <div class="wrap">
       <p class="nav"><a href="./index.html">← Assistance</a></p>
       <h1>Politique de confidentialité</h1>
-      <p class="meta">Application mobile <strong>Appigeek</strong> — dernière mise à jour : mai 2026</p>
+      <p class="meta">Application mobile <strong>Appigeek</strong> — dernière mise à jour : octobre 2026</p>
 
       <p>
         La présente politique décrit comment l’application Appigeek (« l’app ») traite les informations lorsque vous
-        l’utilisez sur votre appareil iOS ou Android.
+        l’utilisez sur votre appareil iOS (ou Android le cas échéant).
       </p>
 
       <h2>1. Responsable et contact</h2>
@@ -101,54 +101,65 @@
       </p>
 
       <h2>3. Données stockées sur votre appareil</h2>
-      <p>L’app enregistre localement sur votre téléphone ou tablette, sans compte obligatoire sur nos serveurs :</p>
+      <p>L’app enregistre localement, sans compte obligatoire :</p>
       <ul>
         <li>la liste des flux auxquels vous êtes abonné ;</li>
-        <li>des informations associées à votre lecture (par exemple les articles marqués comme lus) ;</li>
-        <li>vos préférences d’affichage et de thème dans l’application.</li>
+        <li>l’état de lecture (lus, favoris) et vos préférences (thème, police, langue) ;</li>
+        <li>éventuellement le texte d’articles téléchargés pour la lecture hors ligne ;</li>
+        <li>un identifiant anonyme local pour vos commentaires (permet de supprimer vos propres messages).</li>
       </ul>
+
+      <h2>4. Compte Apple et synchronisation cloud (optionnel)</h2>
       <p>
-        Ces données sont conservées dans le stockage local de l’app (sur l’appareil) et ne sont pas synchronisées avec un
-        compte central géré par nous pour les fonctionnalités décrites dans cette version de l’app.
+        Si vous choisissez « Se connecter avec Apple », nous traitons un identifiant de compte (via Supabase Auth) afin de
+        synchroniser vos abonnements, l’état de lecture et d’enregistrer un jeton de notification push pour les digests
+        d’actualité. L’adresse e‑mail peut être masquée par Apple (« Hide My Email »).
+      </p>
+      <p>
+        Vous pouvez <strong>supprimer votre compte</strong> depuis Paramètres → Supprimer mon compte : cela efface le compte
+        Auth, le profil cloud, les abonnements synchronisés, l’état de lecture cloud et les jetons push associés.
       </p>
 
-      <h2>4. Réseau et contenus tiers</h2>
+      <h2>5. Commentaires</h2>
+      <p>
+        Les commentaires publiés dans l’app sont visibles par les autres utilisateurs (pseudo + message). Ils sont associés
+        à un jeton anonyme local, pas à votre compte Apple. Après suppression de compte, les messages déjà publiés peuvent
+        rester visibles sans lien vers votre identité.
+      </p>
+
+      <h2>6. Réseau et contenus tiers</h2>
       <p>
         Lorsque vous actualisez vos flux ou ouvrez un article, l’app contacte les serveurs correspondant aux URL que vous
-        avez saisies (ou des ressources liées : images, pages web pour la lecture). Ces échanges se font entre votre
-        appareil et ces tiers selon leurs propres politiques.
+        avez saisies (ou des ressources liées : images, pages web). Ces échanges se font entre votre appareil et ces tiers
+        selon leurs propres politiques.
       </p>
 
-      <h2>5. Publicités (Google AdMob)</h2>
+      <h2>7. Publicités (Google AdMob)</h2>
       <p>
-        L’application peut afficher des publicités fournies par <strong>Google</strong> via le programme
-        <strong>Google AdMob</strong>. Google peut collecter et traiter des données techniques et d’usage conformément à sa
-        politique, dans le but de mesurer les performances publicitaires et de personnaliser les annonces lorsque cela est
-        permis par votre système et vos réglages.
+        L’application peut afficher des publicités fournies par <strong>Google</strong> via
+        <strong>Google AdMob</strong>. Google peut collecter et traiter des données techniques conformément à sa politique.
       </p>
       <p>
-        Pour plus de détails : la
-        <a href="https://policies.google.com/privacy" rel="noopener noreferrer">Politique de confidentialité Google</a>
-        et les informations relatives aux annonces sur les appareils mobiles.
+        Pour plus de détails :
+        <a href="https://policies.google.com/privacy" rel="noopener noreferrer">Politique de confidentialité Google</a>.
       </p>
 
-      <h2>6. Pas d’analyse propriétaire</h2>
+      <h2>8. Vos droits (RGPD)</h2>
+      <p>Selon votre situation, vous pouvez demander l’accès, la rectification ou l’effacement de vos données personnelles.</p>
+      <ul>
+        <li>Effacement du compte cloud : directement dans l’app (Paramètres → Supprimer mon compte).</li>
+        <li>Autres demandes : <a href="mailto:netfdorian@gmail.com">netfdorian@gmail.com</a>.</li>
+      </ul>
+
+      <h2>9. Sécurité et enfants</h2>
       <p>
-        En dehors des mécanismes liés aux publicités Google décrits ci‑dessus, nous n’intégrons pas dans cette version de
-        l’app d’outil d’analyse propriétaire (analytics) nous envoyant directement des statistiques d’usage nominatives.
+        Les données locales dépendent de la sécurité de votre appareil. L’app n’est pas destinée aux enfants de moins de
+        13 ans de manière spécifique.
       </p>
 
-      <h2>7. Sécurité et enfants</h2>
+      <h2>10. Modifications</h2>
       <p>
-        Les données locales sur l’appareil dépendent de la sécurité de votre téléphone et de votre système. L’app n’est pas
-        destinée aux enfants de moins de 13 ans de manière spécifique ; les flux consultés dépendent des choix de
-        l’utilisateur.
-      </p>
-
-      <h2>8. Modifications</h2>
-      <p>
-        Nous pouvons mettre à jour cette politique pour refléter l’évolution de l’app ou des obligations légales. La date en
-        tête de page sera alors actualisée ; nous vous encourageons à consulter régulièrement cette page lorsque l’app vous
+        Nous pouvons mettre à jour cette politique. La date en tête de page sera actualisée ; consultez-la lorsque l’app
         signale une mise à jour importante.
       </p>
 
