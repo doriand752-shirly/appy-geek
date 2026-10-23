@@ -6,9 +6,10 @@ import { Platform, useWindowDimensions } from 'react-native';
  * - outer display (closed): squat portrait ~5.4″
  * - inner display (open): landscape book layout
  *
- * Native UITabBarController (React Navigation native bottom tabs) gets this
- * automatically when built with iOS 27.1 SDK. These helpers are for layout
- * that still needs to respect asymmetric safe areas / ad placement.
+ * JS tabBarPosition left/right is intentionally NOT used on Expo 54 —
+ * keep a classic bottom tab bar on all iPhones (incl. Pro Max). Native
+ * UITabBarController side chrome needs screens 4.30 / SDK 57.
+ * These helpers remain for asymmetric safe areas / ad placement.
  */
 
 /** Outer Duo-like: taller than wide but "squat" vs classic phones (~0.46). */

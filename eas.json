@@ -37,6 +37,7 @@
     "production": {
       "env": {
         "NODE_ENV": "production",
+        "RNGMA_IOS_GOOGLE_MOBILE_ADS_SDK_VERSION": "13.11.0",
         "EXPO_PUBLIC_SUPABASE_URL": "https://ppnejmwvmkqnmrzcivqs.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwbmVqbXd2bWtxbm1yemNpdnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNTkxOTUsImV4cCI6MjA5ODczNTE5NX0.TlenN0NZebxRq2Eazii6Haydf92wF61RF50hel5kHnY"
       },

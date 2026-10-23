@@ -58,6 +58,7 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EAS_LOCAL_BUILD_ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+          RNGMA_IOS_GOOGLE_MOBILE_ADS_SDK_VERSION: '13.11.0'
           CI: '1'
         run: |
           set -euo pipefail
