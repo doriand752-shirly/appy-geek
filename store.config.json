@@ -25,7 +25,7 @@
           "veille",
           "numerama"
         ],
-        "releaseNotes": "Version 1.0.2 — plus fluide, plus rapide\n\nAccueil & hors ligne\n\nVos articles sauvegardés (hors ligne) sont visibles directement sur l’accueil\nLe fil se recharge en arrière-plan : vos derniers articles s’affichent tout de suite au lancement\n\nLecture\n\nOuverture d’article nettement plus rapide\nNavigation entre onglets et listes plus fluide\n\nAbonnements\n\nAjout ou retrait d’un flux RSS sans ralentir l’app (traitement en arrière-plan)\nCatalogue Découvrir recentré sur la tech & la pop culture (médias généralistes retirés)\n\nPublicités\n\nNouvelle annonce à chaque article dans le lecteur\nBandeau du bas masqué lorsqu’aucune publicité n’est disponible\n\nMerci de votre confiance — continuez à nous signaler vos retours !",
+        "releaseNotes": "Mise à jour de sécurité et corrections.",
         "marketingUrl": "https://appigeek.github.io/",
         "promoText": "Articles sauvegardés sur l’accueil, ouverture plus rapide, flux RSS sans latence : la veille geek gagne en fluidité.",
         "supportUrl": "https://appigeek.github.io/",

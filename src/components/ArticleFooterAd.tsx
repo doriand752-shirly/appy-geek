@@ -4,6 +4,7 @@ import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native
 import { APP_AD_CONFIG } from '../constants/appAds';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 import { shouldUseGoogleTestAdIds } from '../utils/admobTestIds';
 import { loadGoogleMobileAds } from '../utils/googleMobileAdsModule';
 import { getMobileAdsReady } from '../utils/mobileAdsInit';
@@ -21,6 +22,7 @@ type Props = {
  */
 export function ArticleFooterAd({ reloadKey }: Props) {
   const { palette } = useAppSettings();
+  const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const styles = useMemo(() => createStyles(palette), [palette]);
 
@@ -98,7 +100,7 @@ export function ArticleFooterAd({ reloadKey }: Props) {
   return (
     <View key={reloadKey} style={[styles.wrap, { borderTopColor: palette.border }]}>
       <NativeAdView nativeAd={nativeAd} style={styles.card}>
-        <Text style={styles.attribution}>Publicité</Text>
+        <Text style={styles.attribution}>{t('ad.label')}</Text>
         <NativeMediaView
           resizeMode="cover"
           style={[styles.media, { width: contentWidth, height: mediaHeight }]}

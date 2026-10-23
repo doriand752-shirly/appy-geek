@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,22 +22,26 @@ import { ArticleListToolbar } from '../components/ArticleListToolbar';
 import { ArticleSelectionBar } from '../components/ArticleSelectionBar';
 import { AppigeekLogoMark } from '../components/AppigeekLogo';
 import { AppigeekWordmark } from '../components/AppigeekWordmark';
+import { FeaturedArticlesSection } from '../components/FeaturedArticlesSection';
 import { SavedArticlesSection } from '../components/SavedArticlesSection';
+import { RecommendationsSection } from '../components/RecommendationsSection';
 import { SwipeableArticleCard } from '../components/SwipeableArticleCard';
-import { ThemeCard } from '../components/ThemeCard';
-import { BRAND } from '../constants/brand';
-import { newsThemesWithCustom } from '../constants/newsThemes';
+import type { FeaturedArticle } from '../services/featuredArticlesService';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useComments, useRefreshCommentsOnFocus } from '../context/CommentsContext';
 import { useFeeds } from '../context/FeedsContext';
+import { localeDateTimeLocale, useTranslation } from '../i18n';
+import { hapticLight } from '../utils/haptics';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { RootTabParamList } from '../navigation/RootTabs';
+import { ArticleReaderContent } from './ArticleReaderScreen';
 import type { ParsedArticle } from '../types/article';
 import type { CachedArticleRecord } from '../utils/offlineCache';
 import { type ArticleListFilter, countUnread, filterArticles } from '../utils/articleFilters';
 import { useArticleSelection } from '../hooks/useArticleSelection';
-import { coverUriForTheme, themeIdsForArticle } from '../utils/articleThemes';
+import { isTabletSplitLayout } from '../utils/tabletLayout';
 
 type HomeNav = CompositeNavigationProp<
   BottomTabNavigationProp<RootTabParamList, 'Accueil'>,
@@ -45,15 +50,12 @@ type HomeNav = CompositeNavigationProp<
 
 export function HomeScreen() {
   const navigation = useNavigation<HomeNav>();
-  const {
-    selectedThemeIds,
-    customThemes,
-    palette,
-    themeHomeSectionHidden,
-    setThemeHomeSectionHidden,
-  } = useAppSettings();
+  const { palette, appLocale } = useAppSettings();
+  const { t } = useTranslation();
   const styles = useMemo(() => createHomeStyles(palette), [palette]);
   const { width } = useWindowDimensions();
+  const split = isTabletSplitLayout(width);
+  const wasSplitRef = useRef(split);
   const {
     articles,
     readIds,
@@ -69,10 +71,19 @@ export function HomeScreen() {
     toggleFavorite,
     subscriptions,
   } = useFeeds();
+  const { configured: commentsConfigured, getCommentCount, refreshStats } = useComments();
+
+  useRefreshCommentsOnFocus();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [listFilter, setListFilter] = useState<ArticleListFilter>('all');
   const [feedFilterId, setFeedFilterId] = useState<string | null>(null);
+  const [paneArticle, setPaneArticle] = useState<{
+    articleId: string;
+    url: string;
+    title: string;
+  } | null>(null);
+  const [paneWidth, setPaneWidth] = useState(0);
   const {
     selectionMode,
     selectedIds,
@@ -83,16 +94,12 @@ export function HomeScreen() {
     isSelected,
   } = useArticleSelection();
 
-  const cardWidth = Math.floor((width - spacing.md * 2 - spacing.sm) / 2);
-  const selectedThemeSet = useMemo(() => new Set(selectedThemeIds), [selectedThemeIds]);
-  const displayThemes = useMemo(() => newsThemesWithCustom(customThemes), [customThemes]);
-
   const feedSourcesForFilter = useMemo(() => {
     const idsWithArticles = new Set(articles.map((a) => a.feedId));
     return subscriptions
       .filter((s) => idsWithArticles.has(s.id))
       .map((s) => ({ id: s.id, title: s.title }))
-      .sort((a, b) => a.title.localeCompare(b.title, 'fr'));
+      .sort((a, b) => a.title.localeCompare(b.title, localeDateTimeLocale(appLocale)));
   }, [articles, subscriptions]);
 
   const filteredArticles = useMemo(
@@ -111,60 +118,71 @@ export function HomeScreen() {
     }
   }, [feedFilterId, subscriptions]);
 
+  /** Duo / Split View : en repassant en 1 colonne, ouvrir le lecteur plein écran. */
+  useEffect(() => {
+    const wasSplit = wasSplitRef.current;
+    wasSplitRef.current = split;
+    if (wasSplit && !split && paneArticle) {
+      const params = paneArticle;
+      setPaneArticle(null);
+      navigation.navigate('ArticleReader', params);
+    }
+  }, [split, paneArticle, navigation]);
+
   const totalUnread = useMemo(() => countUnread(articles, readIds), [articles, readIds]);
 
-  const themeBlocks = useMemo(() => {
-    const m = new Map<string, ParsedArticle[]>();
-    for (const a of articles) {
-      for (const tid of themeIdsForArticle(a, customThemes)) {
-        if (!m.has(tid)) m.set(tid, []);
-        m.get(tid)!.push(a);
-      }
-    }
-    return displayThemes
-      .map((t) => {
-        const items = m.get(t.id) ?? [];
-        return {
-          theme: t,
-          items,
-          unread: countUnread(items, readIds),
-        };
-      })
-      .filter((x) => x.items.length > 0 && selectedThemeSet.has(x.theme.id))
-      .sort((a, b) => b.items.length - a.items.length);
-  }, [articles, customThemes, displayThemes, readIds, selectedThemeSet]);
-
-  const openThemePicker = useCallback(() => {
-    navigation.navigate('ThemePicker');
-  }, [navigation]);
-
   const onOpen = useCallback(
-    (a: ParsedArticle, offlineHtml?: string) => {
+    (a: ParsedArticle) => {
       if (!a.link) return;
       void markRead(a.id);
-      navigation.navigate('ArticleReader', {
+      const params = {
         articleId: a.id,
         url: a.link,
         title: a.title,
-        offlineHtml,
-      });
+      };
+      if (split) {
+        setPaneArticle(params);
+        return;
+      }
+      navigation.navigate('ArticleReader', params);
     },
-    [markRead, navigation],
+    [markRead, navigation, split],
   );
 
   const onOpenSaved = useCallback(
     (record: CachedArticleRecord) => {
-      onOpen(record.article, record.html);
+      onOpen(record.article);
     },
     [onOpen],
   );
 
-  const onOpenTheme = useCallback(
-    (themeId: string, themeLabel: string) => {
-      navigation.navigate('ThemeArticles', { themeId, themeLabel });
+  const onOpenFeatured = useCallback(
+    (item: FeaturedArticle) => {
+      const match = articles.find((a) => a.link === item.articleUrl);
+      if (match) {
+        onOpen(match);
+        return;
+      }
+      const articleId = `featured:${item.id}`;
+      void markRead(articleId);
+      const params = {
+        articleId,
+        url: item.articleUrl,
+        title: item.title,
+      };
+      if (split) {
+        setPaneArticle(params);
+        return;
+      }
+      navigation.navigate('ArticleReader', params);
     },
-    [navigation],
+    [articles, markRead, navigation, onOpen, split],
   );
+
+  const handleRefresh = useCallback(async () => {
+    hapticLight();
+    await Promise.all([refresh(), refreshStats()]);
+  }, [refresh, refreshStats]);
 
   const markSelectedRead = useCallback(() => {
     const ids = [...selectedIds];
@@ -177,21 +195,37 @@ export function HomeScreen() {
     const ids = filteredArticles.map((a) => a.id);
     if (!ids.length) return;
     Alert.alert(
-      'Tout marquer comme lu',
-      `${ids.length} article${ids.length > 1 ? 's' : ''} dans cette liste ?`,
+      t('home.markAllReadTitle'),
+      t('home.markAllReadMessage', { count: ids.length }),
       [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Confirmer', onPress: () => void markAllRead(ids) },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.confirm'), onPress: () => void markAllRead(ids) },
       ],
     );
-  }, [filteredArticles, markAllRead]);
+  }, [filteredArticles, markAllRead, t]);
 
-  const showThemeSection =
-    selectedThemeIds.length > 0 || !themeHomeSectionHidden;
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const [showSwipeTip, setShowSwipeTip] = useState(false);
 
-  const hideThemeSection = useCallback(() => {
-    void setThemeHomeSectionHidden(true);
-  }, [setThemeHomeSectionHidden]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const seen = await AsyncStorage.getItem('appigeek_swipe_tip_v1');
+        if (!cancelled && seen !== '1') setShowSwipeTip(true);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const dismissSwipeTip = useCallback(() => {
+    setShowSwipeTip(false);
+    void AsyncStorage.setItem('appigeek_swipe_tip_v1', '1');
+  }, []);
 
   const listHeader = useMemo(
     () => (
@@ -199,12 +233,12 @@ export function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerTitles}>
             <AppigeekWordmark palette={palette} />
-            <Text style={styles.sub}>
-              {BRAND.tagline}
+            <Text style={styles.sub} maxFontSizeMultiplier={1.35}>
+              {t('brand.tagline')}
               {lastUpdated
-                ? ` · MAJ ${new Date(lastUpdated).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+                ? ` · ${t('home.updatedAt')} ${new Date(lastUpdated).toLocaleTimeString(localeDateTimeLocale(appLocale), { hour: '2-digit', minute: '2-digit' })}`
                 : ''}
-              {offlineSyncing ? ' · téléchargement des articles complets…' : ''}
+              {offlineSyncing ? ` · ${t('home.offlineSyncing')}` : ''}
             </Text>
           </View>
           <AppigeekLogoMark size={48} />
@@ -215,59 +249,7 @@ export function HomeScreen() {
             <Text style={styles.bannerText}>{error}</Text>
           </View>
         ) : null}
-        {showThemeSection ? (
-          <>
-            <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitleInline}>Par thème</Text>
-              {selectedThemeIds.length === 0 ? (
-                <Pressable
-                  onPress={hideThemeSection}
-                  hitSlop={8}
-                  style={({ pressed }) => [styles.hideSectionBtn, pressed && { opacity: 0.75 }]}
-                >
-                  <Text style={styles.hideSectionBtnText}>Masquer</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            {selectedThemeIds.length === 0 ? (
-              <View style={styles.themeEmptyWrap}>
-                <Text style={[styles.themeHint, styles.themeHintFlush]}>
-                  Aucun thème sélectionné. Choisissez ceux à afficher sur l’accueil.
-                </Text>
-                <Pressable
-                  onPress={openThemePicker}
-                  style={({ pressed }) => [styles.themePickerBtn, pressed && { opacity: 0.85 }]}
-                >
-                  <Text style={styles.themePickerBtnText}>Choisir les thèmes</Text>
-                  <Ionicons name="chevron-forward" size={18} color={palette.accent} />
-                </Pressable>
-              </View>
-            ) : themeBlocks.length === 0 && !loading && !refreshing ? (
-              <Text style={styles.themeHint}>
-                Les articles seront classés ici d’après leur titre (thèmes intégrés ou votre nom de
-                thème personnalisé). Ajoutez des flux pour remplir l’accueil.
-              </Text>
-            ) : null}
-            <View style={styles.themeGrid}>
-              {themeBlocks.map(({ theme, items, unread }) => (
-                <ThemeCard
-                  key={theme.id}
-                  label={theme.label}
-                  count={items.length}
-                  unreadCount={unread}
-                  cardWidth={cardWidth}
-                  imageUri={coverUriForTheme(items, theme.fallbackImageUrl)}
-                  onPress={() => onOpenTheme(theme.id, theme.label)}
-                />
-              ))}
-            </View>
-          </>
-        ) : null}
-        <SavedArticlesSection onOpenArticle={onOpenSaved} />
-        <Text style={styles.sectionTitle}>
-          Fil d’actualité
-          {totalUnread > 0 ? ` · ${totalUnread} non lu${totalUnread > 1 ? 's' : ''}` : ''}
-        </Text>
+
         <ArticleListToolbar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -278,46 +260,111 @@ export function HomeScreen() {
           onFeedIdChange={setFeedFilterId}
           searchPlaceholder={
             selectedFeedTitle
-              ? `Rechercher dans ${selectedFeedTitle}…`
-              : 'Rechercher un article…'
+              ? t('home.searchInFeed', { feed: selectedFeedTitle })
+              : t('home.searchArticles')
           }
           onMarkAllRead={selectionMode ? undefined : confirmMarkAllRead}
         />
+
+        <FeaturedArticlesSection onOpen={onOpenFeatured} compact />
+
+        <Text style={styles.sectionTitle}>
+          {t('home.feed')}
+          {totalUnread > 0 ? ` · ${totalUnread} ${t('home.unreadCount')}` : ''}
+        </Text>
+
+        {showSwipeTip ? (
+          <Pressable
+            onPress={dismissSwipeTip}
+            style={({ pressed }) => [styles.swipeTip, pressed && { opacity: 0.9 }]}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.swipeTipDismiss')}
+          >
+            <Ionicons name="swap-horizontal-outline" size={18} color={palette.accent} />
+            <Text style={styles.swipeTipText} maxFontSizeMultiplier={1.35}>
+              {t('home.swipeTip')}
+            </Text>
+            <Text style={styles.swipeTipDismiss}>{t('home.swipeTipDismiss')}</Text>
+          </Pressable>
+        ) : null}
       </View>
     ),
     [
-      cardWidth,
       confirmMarkAllRead,
       feedFilterId,
       feedSourcesForFilter,
       error,
-      hideThemeSection,
       lastUpdated,
       listFilter,
       selectedFeedTitle,
-      loading,
       offlineSyncing,
-      onOpenSaved,
-      onOpenTheme,
-      openThemePicker,
+      onOpenFeatured,
       palette,
-      refreshing,
       searchQuery,
-      selectedThemeIds.length,
-      showThemeSection,
       styles,
-      themeBlocks,
       totalUnread,
+      appLocale,
+      t,
+      selectionMode,
+      showSwipeTip,
+      dismissSwipeTip,
+    ],
+  );
+
+  const listFooter = useMemo(
+    () => (
+      <View style={styles.trail}>
+        <Pressable
+          onPress={() => setExtrasOpen((v) => !v)}
+          style={({ pressed }) => [styles.extrasToggle, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: extrasOpen }}
+        >
+          <Text style={styles.extrasToggleText}>
+            {extrasOpen ? t('home.hideExtras') : t('home.showExtras')}
+          </Text>
+          <Ionicons
+            name={extrasOpen ? 'chevron-up' : 'chevron-down'}
+            size={18}
+            color={palette.accent}
+          />
+        </Pressable>
+        {extrasOpen ? (
+          <>
+            <SavedArticlesSection onOpenArticle={onOpenSaved} />
+            <RecommendationsSection
+              articles={articles}
+              readIds={readIds}
+              favoriteIds={favoriteIds}
+              onOpen={onOpen}
+            />
+          </>
+        ) : null}
+      </View>
+    ),
+    [
+      articles,
+      extrasOpen,
+      favoriteIds,
+      onOpen,
+      onOpenSaved,
+      palette.accent,
+      readIds,
+      styles,
+      t,
     ],
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.screenBody}>
-        <FlatList
+    <SafeAreaView style={styles.safe} edges={split ? ['top', 'left', 'right'] : ['top']}>
+      <View style={[styles.screenBody, split && styles.splitRow]}>
+        <View style={split ? styles.splitList : styles.flex}>
+          <FlatList
+          key={split ? 'home-split' : 'home-single'}
           data={filteredArticles}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={listHeader}
+          ListFooterComponent={listFooter}
           contentContainerStyle={styles.list}
           initialNumToRender={10}
           maxToRenderPerBatch={8}
@@ -326,7 +373,7 @@ export function HomeScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={refresh}
+              onRefresh={() => void handleRefresh()}
               tintColor={palette.accent}
             />
           }
@@ -334,28 +381,31 @@ export function HomeScreen() {
             loading && articles.length === 0 ? (
               <View style={styles.empty}>
                 <ActivityIndicator color={palette.accent} />
-                <Text style={styles.emptyText}>Chargement des articles…</Text>
+                <Text style={styles.emptyText}>{t('home.loadingArticles')}</Text>
               </View>
             ) : refreshing && articles.length === 0 ? (
               <View style={styles.empty}>
                 <ActivityIndicator color={palette.accent} />
-                <Text style={styles.emptyText}>Actualisation…</Text>
+                <Text style={styles.emptyText}>{t('home.refreshing')}</Text>
               </View>
             ) : (
               <View style={styles.empty}>
                 <Ionicons name="newspaper-outline" size={40} color={palette.textMuted} />
                 <Text style={styles.emptyText}>
                   {subscriptions.length === 0
-                    ? 'Ajoutez votre premier flux dans « Découvrir » ou « Abonnements ».'
+                    ? t('home.emptyNoFeeds')
                     : listFilter === 'favorites'
-                      ? 'Aucun favori pour l’instant.'
+                      ? t('home.emptyNoFavorites')
                       : listFilter === 'unread'
-                        ? 'Tous les articles sont lus.'
+                        ? t('home.emptyAllRead')
                         : feedFilterId && selectedFeedTitle
-                          ? `Aucun article pour ${selectedFeedTitle}${searchQuery.trim() ? ' avec cette recherche' : ''}.`
+                          ? t('home.emptyFeedSearch', {
+                              feed: selectedFeedTitle,
+                              search: searchQuery.trim() ? ` (${t('home.emptySearch')})` : '',
+                            })
                           : searchQuery.trim()
-                            ? 'Aucun résultat pour cette recherche.'
-                            : 'Aucun article pour l’instant. Tirez pour actualiser.'}
+                            ? t('home.emptySearch')
+                            : t('home.emptyDefault')}
                 </Text>
               </View>
             )
@@ -367,6 +417,9 @@ export function HomeScreen() {
               favorite={favoriteIds.has(item.id)}
               selectionMode={selectionMode}
               selected={isSelected(item.id)}
+              paneActive={paneArticle?.articleId === item.id}
+              commentCount={getCommentCount(item.link)}
+              showCommentCount={commentsConfigured}
               onOpen={() => onOpen(item)}
               onLongPress={() => enterSelection(item.id)}
               onToggleSelect={() => toggleSelect(item.id)}
@@ -383,6 +436,30 @@ export function HomeScreen() {
             onMarkRead={markSelectedRead}
           />
         ) : null}
+        </View>
+        {split ? (
+          <View
+            style={styles.splitPane}
+            onLayout={(e) => setPaneWidth(e.nativeEvent.layout.width)}
+          >
+            {paneArticle ? (
+              <ArticleReaderContent
+                articleId={paneArticle.articleId}
+                url={paneArticle.url}
+                title={paneArticle.title}
+                navigation={{ setOptions: () => {} }}
+                embedded
+                onRequestClose={() => setPaneArticle(null)}
+                layoutWidth={paneWidth}
+              />
+            ) : (
+              <View style={styles.splitEmpty}>
+                <Ionicons name="newspaper-outline" size={40} color={palette.textMuted} />
+                <Text style={styles.splitEmptyText}>{t('home.pickArticle')}</Text>
+              </View>
+            )}
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -392,7 +469,28 @@ function createHomeStyles(palette: AppPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: palette.bg },
     screenBody: { flex: 1 },
+    flex: { flex: 1 },
+    splitRow: { flexDirection: 'row', alignItems: 'stretch' },
+    splitList: {
+      flexGrow: 0,
+      flexShrink: 0,
+      flexBasis: '40%',
+      maxWidth: 440,
+      minWidth: 280,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderRightColor: palette.border,
+    },
+    splitPane: { flex: 1, minWidth: 280, backgroundColor: palette.bg },
+    splitEmpty: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    splitEmptyText: { ...typography.body, color: palette.textMuted, textAlign: 'center' },
     lead: { paddingBottom: spacing.xs },
+    trail: { paddingTop: spacing.sm, paddingBottom: spacing.xs },
     header: {
       paddingHorizontal: spacing.md,
       paddingBottom: spacing.md,
@@ -425,64 +523,48 @@ function createHomeStyles(palette: AppPalette) {
       letterSpacing: 0.6,
       textTransform: 'uppercase',
     },
-    sectionTitleRow: {
+    extrasToggle: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: spacing.md,
+      justifyContent: 'center',
+      gap: spacing.xs,
+      marginHorizontal: spacing.md,
       marginBottom: spacing.sm,
-      marginTop: spacing.xs,
+      minHeight: 44,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surface,
     },
-    sectionTitleInline: {
-      ...typography.subtitle,
-      color: palette.textMuted,
-      fontSize: 13,
-      letterSpacing: 0.6,
-      textTransform: 'uppercase',
-    },
-    hideSectionBtn: {
-      paddingVertical: spacing.xs,
-      paddingHorizontal: spacing.sm,
-    },
-    hideSectionBtnText: {
+    extrasToggleText: {
       ...typography.subtitle,
       fontSize: 14,
-      color: palette.textMuted,
+      color: palette.accent,
     },
-    themeEmptyWrap: {
-      paddingHorizontal: spacing.md,
-      marginBottom: spacing.sm,
-      gap: spacing.sm,
-    },
-    themeHint: {
-      ...typography.caption,
-      color: palette.textMuted,
-      paddingHorizontal: spacing.md,
-      marginBottom: spacing.sm,
-    },
-    themeHintFlush: { paddingHorizontal: 0, marginBottom: 0 },
-    themePickerBtn: {
+    swipeTip: {
       flexDirection: 'row',
       alignItems: 'center',
-      alignSelf: 'flex-start',
-      gap: spacing.xs,
-      paddingVertical: spacing.sm,
+      gap: spacing.sm,
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.sm,
       paddingHorizontal: spacing.md,
-      borderRadius: 10,
+      paddingVertical: spacing.sm,
+      minHeight: 44,
+      borderRadius: 12,
       backgroundColor: palette.surfaceElevated,
       borderWidth: 1,
       borderColor: palette.border,
     },
-    themePickerBtnText: {
-      ...typography.subtitle,
-      fontSize: 15,
-      color: palette.accent,
+    swipeTipText: {
+      ...typography.caption,
+      color: palette.text,
+      flex: 1,
+      lineHeight: 18,
     },
-    themeGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      paddingHorizontal: spacing.md,
-      justifyContent: 'space-between',
+    swipeTipDismiss: {
+      ...typography.caption,
+      color: palette.accent,
+      fontWeight: '700',
     },
     list: { paddingTop: spacing.sm, paddingBottom: spacing.xl },
     empty: { alignItems: 'center', marginTop: spacing.xl, gap: spacing.sm },

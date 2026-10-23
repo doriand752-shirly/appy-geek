@@ -9,6 +9,9 @@ import React, {
   useState,
 } from 'react';
 
+import { detectDeviceLocale, sanitizeAppLocale } from '../i18n/detectLocale';
+import type { AppLocale } from '../i18n/types';
+import { translate } from '../i18n/translations';
 import { ALL_THEME_IDS } from '../constants/newsThemes';
 import { buildNavigationTheme } from '../constants/theme';
 import {
@@ -30,6 +33,11 @@ import {
   sanitizeOfflineCacheCount,
   sanitizeReaderFontSize,
 } from '../types/settings';
+import {
+  COMMENT_PSEUDO_MAX,
+  isValidCommentPseudo,
+  sanitizeCommentPseudo,
+} from '../utils/commentIdentity';
 
 const STORAGE_KEY = 'appigeek_app_settings_v1';
 const CUSTOM_ID_PREFIX = 'custom_';
@@ -45,6 +53,9 @@ type PersistedShape = {
   offlineCacheEnabled?: boolean;
   offlineCacheLimit?: number;
   themeHomeSectionHidden?: boolean;
+  commentPseudo?: string;
+  pushDigestEnabled?: boolean;
+  appLocale?: unknown;
 };
 
 function sanitizeCustomThemes(raw: unknown): CustomNewsTheme[] {
@@ -101,6 +112,13 @@ type AppSettingsContextValue = {
   setVisualThemeId: (id: VisualThemeId) => Promise<void>;
   statusBarStyle: 'light' | 'dark';
   navigationTheme: ReturnType<typeof buildNavigationTheme>;
+  commentPseudo: string;
+  setCommentPseudo: (pseudo: string) => Promise<void>;
+  pushDigestEnabled: boolean;
+  setPushDigestEnabled: (enabled: boolean) => Promise<void>;
+  appLocale: AppLocale;
+  setAppLocale: (locale: AppLocale) => Promise<void>;
+  hydrated: boolean;
 };
 
 const AppSettingsContext = createContext<AppSettingsContextValue | null>(null);
@@ -114,6 +132,9 @@ type SettingsSnapshot = {
   offlineCacheEnabled: boolean;
   offlineCacheLimit: OfflineCacheCount;
   themeHomeSectionHidden: boolean;
+  commentPseudo: string;
+  pushDigestEnabled: boolean;
+  appLocale: AppLocale;
 };
 
 async function persistSettings(s: SettingsSnapshot) {
@@ -127,6 +148,9 @@ async function persistSettings(s: SettingsSnapshot) {
       offlineCacheEnabled: s.offlineCacheEnabled,
       offlineCacheLimit: s.offlineCacheLimit,
       themeHomeSectionHidden: s.themeHomeSectionHidden,
+      commentPseudo: s.commentPseudo,
+      pushDigestEnabled: s.pushDigestEnabled,
+      appLocale: s.appLocale,
     };
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
@@ -144,6 +168,10 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   const [customThemes, setCustomThemesState] = useState<CustomNewsTheme[]>([]);
   const [visualThemeId, setVisualThemeIdState] = useState<VisualThemeId>(DEFAULT_VISUAL_THEME_ID);
   const [themeHomeSectionHidden, setThemeHomeSectionHiddenState] = useState(false);
+  const [commentPseudo, setCommentPseudoState] = useState('');
+  const [pushDigestEnabled, setPushDigestEnabledState] = useState(true);
+  const [appLocale, setAppLocaleState] = useState<AppLocale>(() => detectDeviceLocale());
+  const [hydrated, setHydrated] = useState(false);
 
   const snapshot = useCallback(
     (): SettingsSnapshot => ({
@@ -155,6 +183,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       offlineCacheEnabled,
       offlineCacheLimit,
       themeHomeSectionHidden,
+      commentPseudo,
+      pushDigestEnabled,
+      appLocale,
     }),
     [
       readerDefaultView,
@@ -165,6 +196,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       offlineCacheEnabled,
       offlineCacheLimit,
       themeHomeSectionHidden,
+      commentPseudo,
+      pushDigestEnabled,
+      appLocale,
     ],
   );
 
@@ -186,8 +220,20 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (cancelled || !raw) return;
+        if (cancelled) return;
+        if (!raw) {
+          const detected = detectDeviceLocale();
+          setAppLocaleState(detected);
+          await persistSettings({ ...snapshot(), appLocale: detected });
+          return;
+        }
         const parsed = JSON.parse(raw) as PersistedShape;
+        const storedLocale = sanitizeAppLocale(parsed.appLocale);
+        const locale: AppLocale = storedLocale ?? 'fr';
+        setAppLocaleState(locale);
+        if (!storedLocale) {
+          await persistSettings({ ...snapshot(), appLocale: locale });
+        }
         const ct = sanitizeCustomThemes(parsed.customThemes);
         if (parsed.readerDefaultView === 'full' || parsed.readerDefaultView === 'preview') {
           setReaderDefaultViewState(parsed.readerDefaultView);
@@ -209,8 +255,16 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
         if (typeof parsed.themeHomeSectionHidden === 'boolean') {
           setThemeHomeSectionHiddenState(parsed.themeHomeSectionHidden);
         }
+        if (typeof parsed.commentPseudo === 'string') {
+          setCommentPseudoState(sanitizeCommentPseudo(parsed.commentPseudo));
+        }
+        if (typeof parsed.pushDigestEnabled === 'boolean') {
+          setPushDigestEnabledState(parsed.pushDigestEnabled);
+        }
       } catch {
         /* défauts */
+      } finally {
+        if (!cancelled) setHydrated(true);
       }
     })();
     return () => {
@@ -314,12 +368,16 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
   const addCustomTheme = useCallback(
     async (label: string): Promise<{ error: string | null }> => {
       const trimmed = label.trim();
-      if (!trimmed) return { error: 'Entrez un nom de thème.' };
+      if (!trimmed) return { error: translate(appLocale, 'themePicker.nameRequired') };
       if (trimmed.length > MAX_CUSTOM_LABEL_LENGTH) {
-        return { error: `Le nom est trop long (${MAX_CUSTOM_LABEL_LENGTH} caractères max).` };
+        return {
+          error: translate(appLocale, 'themePicker.nameTooLong', {
+            max: MAX_CUSTOM_LABEL_LENGTH,
+          }),
+        };
       }
       if (customThemes.length >= MAX_CUSTOM_THEMES) {
-        return { error: 'Nombre maximum de thèmes personnalisés atteint.' };
+        return { error: translate(appLocale, 'themePicker.maxThemes') };
       }
       const id = `${CUSTOM_ID_PREFIX}${randomUUID()}`;
       const entry: CustomNewsTheme = { id, label: trimmed };
@@ -334,7 +392,34 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       });
       return { error: null };
     },
-    [customThemes, selectedThemeIds, snapshot],
+    [customThemes, selectedThemeIds, snapshot, appLocale],
+  );
+
+  const setAppLocale = useCallback(
+    async (locale: AppLocale) => {
+      const next = sanitizeAppLocale(locale) ?? 'fr';
+      setAppLocaleState(next);
+      await persistSettings({ ...snapshot(), appLocale: next });
+    },
+    [snapshot],
+  );
+
+  const setCommentPseudo = useCallback(
+    async (pseudo: string) => {
+      const next = sanitizeCommentPseudo(pseudo);
+      if (next && !isValidCommentPseudo(next)) return;
+      setCommentPseudoState(next);
+      await persistSettings({ ...snapshot(), commentPseudo: next });
+    },
+    [snapshot],
+  );
+
+  const setPushDigestEnabled = useCallback(
+    async (enabled: boolean) => {
+      setPushDigestEnabledState(enabled);
+      await persistSettings({ ...snapshot(), pushDigestEnabled: enabled });
+    },
+    [snapshot],
   );
 
   const removeCustomTheme = useCallback(
@@ -379,6 +464,13 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       setVisualThemeId,
       statusBarStyle,
       navigationTheme,
+      commentPseudo,
+      setCommentPseudo,
+      pushDigestEnabled,
+      setPushDigestEnabled,
+      appLocale,
+      setAppLocale,
+      hydrated,
     }),
     [
       readerDefaultView,
@@ -405,6 +497,13 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       setVisualThemeId,
       statusBarStyle,
       navigationTheme,
+      commentPseudo,
+      setCommentPseudo,
+      pushDigestEnabled,
+      setPushDigestEnabled,
+      appLocale,
+      setAppLocale,
+      hydrated,
     ],
   );
 

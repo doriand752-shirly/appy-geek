@@ -5,7 +5,7 @@
  */
 export const BRAND = {
   name: 'Appigeek',
-  /** Phrase d’accroche affichée sur l’accueil et en bas des réglages */
+  /** Fallback FR — l’UI affiche `t('brand.tagline')`. */
   tagline: 'Votre veille geek, un flux à la fois',
   /** Dégradé signature du monogramme AG (icône app + logo in-app) */
   gradientStart: '#5b47e0',

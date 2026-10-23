@@ -1,4 +1,4 @@
-import { sanitizeArticleHtml } from './sanitizeArticleHtml';
+import { extractionHintsForUrl } from './articleSourceRules';
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -22,6 +22,10 @@ const ENTRY_CONTENT_CLASS_HINTS = [
   'field-body',
   'post-entry',
   'article-text',
+  'cn__p-pb__ar',
+  'mvp-content-main',
+  'texteanalyseproduit',
+  'article__content',
 ] as const;
 
 function escapeClassRegexFragment(s: string): string {
@@ -77,11 +81,10 @@ function extractLongestBalancedTag(html: string, tag: string, minInnerLen: numbe
 
 /**
  * Extrait `<tag class="…hint…">…</tag>` avec fermeture équilibrée (div ou section).
- * Beaucoup de thèmes WP utilisent `<section class="entry-content">` — les anciennes `div` seules ratent le bloc.
  */
 function extractByTagAndClass(
   html: string,
-  tag: 'div' | 'section',
+  tag: 'div' | 'section' | 'article',
   classSubstring: string,
 ): string | null {
   const esc = escapeClassRegexFragment(classSubstring);
@@ -92,25 +95,53 @@ function extractByTagAndClass(
   const m = openRe.exec(html);
   if (!m || m.index === undefined) return null;
   const contentStart = m.index + m[0].length;
-  const inner = extractBalancedFromOpenIndex(html, tag, contentStart, 260);
-  return inner ? sanitizeArticleHtml(inner) : null;
+  const inner = extractBalancedFromOpenIndex(html, tag, contentStart, 200);
+  return inner;
 }
 
-function collectEntryBodyChunks(html: string): string[] {
+/** Extrait le contenu d’un élément par son `id`. */
+function extractByElementId(html: string, idValue: string): string | null {
+  const esc = escapeClassRegexFragment(idValue);
+  const openRe = new RegExp(`<([a-z][a-z0-9]*)\\b[^>]*\\bid\\s*=\\s*["']${esc}["'][^>]*>`, 'i');
+  const m = openRe.exec(html);
+  if (!m || m.index === undefined) return null;
+  const tag = m[1];
+  const inner = extractBalancedFromOpenIndex(html, tag, m.index + m[0].length, 200);
+  return inner;
+}
+
+function strippedTextLen(html: string): number {
+  return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length;
+}
+
+function collectEntryBodyChunks(html: string, pageUrl: string): string[] {
   const out: string[] = [];
-  for (const cls of ENTRY_CONTENT_CLASS_HINTS) {
-    /* section en premier : Univers Freebox, nombreux thèmes Gantry / WP */
-    const fromSection = extractByTagAndClass(html, 'section', cls);
-    if (fromSection) out.push(fromSection);
-    const fromDiv = extractByTagAndClass(html, 'div', cls);
-    if (fromDiv) out.push(fromDiv);
+  const { ids, classes } = extractionHintsForUrl(pageUrl);
+
+  for (const id of ids) {
+    const inner = extractByElementId(html, id);
+    if (inner) out.push(inner);
+  }
+
+  const classHints = [...new Set([...classes, ...ENTRY_CONTENT_CLASS_HINTS])];
+  for (const cls of classHints) {
+    for (const tag of ['section', 'article', 'div'] as const) {
+      const inner = extractByTagAndClass(html, tag, cls);
+      if (inner) out.push(inner);
+    }
   }
   return out;
 }
 
-function pickLongest(chunks: string[]): string | null {
+function pickBestBodyChunk(chunks: string[]): string | null {
   if (chunks.length === 0) return null;
-  return chunks.reduce((a, b) => (a.length >= b.length ? a : b));
+  return chunks.reduce((best, cur) => {
+    const bestStrip = strippedTextLen(best);
+    const curStrip = strippedTextLen(cur);
+    if (curStrip > bestStrip + 80) return cur;
+    if (bestStrip > curStrip + 80) return best;
+    return cur.length >= best.length ? cur : best;
+  });
 }
 
 /**
@@ -128,21 +159,20 @@ export async function fetchArticleHtmlFallback(pageUrl: string): Promise<string 
   const html = await res.text();
   if (html.length < 800) return null;
 
-  const structured = collectEntryBodyChunks(html);
-  const bestStructured = pickLongest(structured);
+  const structured = collectEntryBodyChunks(html, pageUrl);
+  const bestStructured = pickBestBodyChunk(structured);
   if (bestStructured) {
     return bestStructured;
   }
 
-  /** Sans bloc « entry-content » détecté : éviter `<main>` qui englobe souvent listes + sidebar (ex. colonne entière). */
   const artInner = extractLongestBalancedTag(html, 'article', 320);
   if (artInner) {
-    return sanitizeArticleHtml(artInner);
+    return artInner;
   }
 
   const mainInner = extractLongestBalancedTag(html, 'main', 320);
   if (mainInner) {
-    return sanitizeArticleHtml(mainInner);
+    return mainInner;
   }
 
   return null;

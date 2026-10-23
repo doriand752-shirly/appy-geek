@@ -36,11 +36,14 @@
     },
     "production": {
       "env": {
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ppnejmwvmkqnmrzcivqs.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwbmVqbXd2bWtxbm1yemNpdnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNTkxOTUsImV4cCI6MjA5ODczNTE5NX0.TlenN0NZebxRq2Eazii6Haydf92wF61RF50hel5kHnY"
       },
       "autoIncrement": true,
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "image": "macos-tahoe-26.6-xcode-27.1"
       }
     }
   },

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -14,14 +14,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { getGeekTopics } from '../constants/suggestedFeedsByLocale';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { useFeeds } from '../context/FeedsContext';
+import { useTranslation } from '../i18n';
 import { parseOpml } from '../utils/opml';
 
 export function SubscriptionsScreen() {
-  const { palette } = useAppSettings();
+  const { palette, appLocale } = useAppSettings();
+  const { t } = useTranslation();
   const styles = useMemo(() => createSubscriptionsStyles(palette), [palette]);
   const {
     subscriptions,
@@ -33,6 +36,39 @@ export function SubscriptionsScreen() {
   } = useFeeds();
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(() => new Set());
+  const geekTopics = useMemo(() => getGeekTopics(appLocale), [appLocale]);
+
+  const hasUrl = useCallback(
+    (feedUrl: string) => subscriptions.some((s) => s.url === feedUrl),
+    [subscriptions],
+  );
+
+  const filteredTopics = useMemo(() => {
+    const q = catalogQuery.trim().toLowerCase();
+    if (!q) return geekTopics;
+    return geekTopics
+      .map((topic) => ({
+        ...topic,
+        feeds: topic.feeds.filter(
+          (f) =>
+            f.title.toLowerCase().includes(q) ||
+            f.url.toLowerCase().includes(q) ||
+            topic.title.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((topic) => topic.feeds.length > 0);
+  }, [catalogQuery, geekTopics]);
+
+  const toggleTopic = useCallback((id: string) => {
+    setExpandedTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const onAdd = async () => {
     try {
@@ -42,18 +78,18 @@ export function SubscriptionsScreen() {
         const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
         display = new URL(withProto).hostname.replace(/^www\./, '');
       }
-      await addSubscription(display || raw || 'Flux RSS', raw);
+      await addSubscription(display || raw || t('subscriptions.defaultFeedName'), raw);
       setTitle('');
       setUrl('');
     } catch {
-      Alert.alert('URL invalide', 'Collez une adresse de flux RSS ou Atom valide (https://…).');
+      Alert.alert(t('subscriptions.invalidUrlTitle'), t('subscriptions.invalidUrlMessage'));
     }
   };
 
   const confirmRemove = (name: string, id: string) => {
-    Alert.alert('Retirer ce flux ?', name, [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Retirer', style: 'destructive', onPress: () => void removeSubscription(id) },
+    Alert.alert(t('subscriptions.removeFeedTitle'), name, [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.remove'), style: 'destructive', onPress: () => void removeSubscription(id) },
     ]);
   };
 
@@ -65,13 +101,13 @@ export function SubscriptionsScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(path, {
           mimeType: 'application/xml',
-          dialogTitle: 'Exporter les abonnements (OPML)',
+          dialogTitle: t('subscriptions.exportOpml'),
         });
       } else {
-        Alert.alert('Export OPML', 'Partage non disponible sur cet appareil.');
+        Alert.alert(t('subscriptions.exportOpml'), t('subscriptions.exportUnavailable'));
       }
     } catch {
-      Alert.alert('Export impossible', 'Réessayez dans un instant.');
+      Alert.alert(t('common.error'), t('subscriptions.exportFailed'));
     }
   };
 
@@ -85,55 +121,159 @@ export function SubscriptionsScreen() {
       const xml = await FileSystem.readAsStringAsync(result.assets[0].uri);
       const feeds = parseOpml(xml);
       if (!feeds.length) {
-        Alert.alert('Import OPML', 'Aucun flux trouvé dans ce fichier.');
+        Alert.alert(t('subscriptions.importOpml'), t('subscriptions.importEmpty'));
         return;
       }
       const added = await importSubscriptions(feeds);
       Alert.alert(
-        'Import terminé',
+        t('subscriptions.importDone'),
         added > 0
-          ? `${added} flux ajouté${added > 1 ? 's' : ''}.`
-          : 'Tous les flux du fichier étaient déjà présents.',
+          ? t('subscriptions.importSuccess', { count: added })
+          : t('subscriptions.importAllPresent'),
       );
     } catch {
-      Alert.alert('Import impossible', 'Vérifiez que le fichier est un OPML valide.');
+      Alert.alert(t('subscriptions.importFailedTitle'), t('subscriptions.importFailedMessage'));
     }
   };
 
   const confirmReset = () => {
-    Alert.alert(
-      'Réinitialiser',
-      'Revenir aux flux par défaut et effacer la liste des articles lus ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Réinitialiser', style: 'destructive', onPress: () => void resetToDefaults() },
-      ],
-    );
+    Alert.alert(t('subscriptions.resetConfirmTitle'), t('subscriptions.resetConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('subscriptions.resetDefaults'),
+        style: 'destructive',
+        onPress: () => void resetToDefaults(),
+      },
+    ]);
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Mes abonnements</Text>
-        <Text style={styles.subtitle}>
-          Gérez vos sources. Astuce : beaucoup de sites proposent un lien « RSS » en bas de page.
-        </Text>
+        <Text style={styles.title}>{t('subscriptions.title')}</Text>
+        <Text style={styles.subtitle}>{t('subscriptions.subtitle')}</Text>
       </View>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Text style={styles.sectionLabel}>
+          {t('subscriptions.yourFeeds', { count: subscriptions.length })}
+        </Text>
+        {subscriptions.length === 0 ? (
+          <Text style={styles.emptyHint}>{t('subscriptions.empty')}</Text>
+        ) : (
+          subscriptions.map((s) => (
+            <View key={s.id} style={styles.subRow}>
+              <View style={styles.subText}>
+                <Text style={styles.subTitle}>{s.title}</Text>
+                <Text style={styles.subUrl} numberOfLines={2}>
+                  {s.url}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel={t('subscriptions.removeA11y', { title: s.title })}
+                onPress={() => confirmRemove(s.title, s.id)}
+                style={({ pressed }) => [styles.trash, pressed && { opacity: 0.75 }]}
+              >
+                <Ionicons name="trash-outline" size={22} color={palette.danger} />
+              </Pressable>
+            </View>
+          ))
+        )}
+
+        <Pressable
+          onPress={confirmReset}
+          style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.secondaryText}>{t('subscriptions.resetDefaults')}</Text>
+        </Pressable>
+
+        <Text style={styles.sectionLabel}>{t('discover.title')}</Text>
+        <Text style={styles.sectionHint}>{t('discover.subtitle')}</Text>
+        <TextInput
+          value={catalogQuery}
+          onChangeText={setCatalogQuery}
+          placeholder={t('subscriptions.catalogSearch')}
+          placeholderTextColor={palette.textMuted}
+          style={styles.searchInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+        {filteredTopics.map((topic) => {
+          const open = expandedTopics.has(topic.id) || catalogQuery.trim().length > 0;
+          return (
+            <View key={topic.id} style={styles.topicCard}>
+              <Pressable
+                onPress={() => toggleTopic(topic.id)}
+                style={({ pressed }) => [styles.topicHeader, pressed && { opacity: 0.9 }]}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open }}
+              >
+                <View style={styles.topicHeaderText}>
+                  <Text style={styles.topicTitle}>{topic.title}</Text>
+                  <Text style={styles.topicDesc} numberOfLines={2}>
+                    {topic.description} · {topic.feeds.length}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={open ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color={palette.textMuted}
+                />
+              </Pressable>
+              {open
+                ? topic.feeds.map((f) => {
+                    const added = hasUrl(f.url);
+                    return (
+                      <View key={f.url} style={styles.feedRow}>
+                        <View style={styles.feedRowText}>
+                          <Text style={styles.feedName}>{f.title}</Text>
+                          <Text style={styles.feedUrl} numberOfLines={1}>
+                            {f.url}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => void addSubscription(f.title, f.url)}
+                          disabled={added}
+                          accessibilityLabel={
+                            added
+                              ? t('subscriptions.alreadyAddedA11y', { title: f.title })
+                              : t('subscriptions.addA11y', { title: f.title })
+                          }
+                          style={({ pressed }) => [
+                            styles.addBtn,
+                            added && styles.addedBtn,
+                            pressed && !added && styles.addBtnPressed,
+                          ]}
+                        >
+                          {added ? (
+                            <Ionicons name="checkmark" size={20} color={palette.success} />
+                          ) : (
+                            <Ionicons name="add" size={22} color={palette.onAccent} />
+                          )}
+                        </Pressable>
+                      </View>
+                    );
+                  })
+                : null}
+            </View>
+          );
+        })}
+
+        <Text style={styles.sectionLabel}>{t('subscriptions.addFeed')}</Text>
         <View style={styles.form}>
-          <Text style={styles.label}>Nom affiché (optionnel)</Text>
+          <Text style={styles.label}>{t('subscriptions.feedTitle')}</Text>
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="Ma source préférée"
+            placeholder={t('subscriptions.feedTitlePlaceholder')}
             placeholderTextColor={palette.textMuted}
             style={styles.input}
           />
-          <Text style={styles.label}>URL du flux</Text>
+          <Text style={styles.label}>{t('subscriptions.feedUrl')}</Text>
           <TextInput
             value={url}
             onChangeText={setUrl}
-            placeholder="https://exemple.com/feed.xml"
+            placeholder={t('subscriptions.feedUrlPlaceholder')}
             placeholderTextColor={palette.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
@@ -145,53 +285,27 @@ export function SubscriptionsScreen() {
             style={({ pressed }) => [styles.primaryBtn, pressed && styles.primaryBtnPressed]}
           >
             <Ionicons name="add-circle-outline" size={20} color={palette.onAccent} />
-            <Text style={styles.primaryBtnText}>Ajouter le flux</Text>
+            <Text style={styles.primaryBtnText}>{t('subscriptions.add')}</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.sectionLabel}>Sauvegarde OPML</Text>
+        <Text style={styles.sectionLabel}>{t('subscriptions.opmlSection')}</Text>
         <View style={styles.opmlRow}>
           <Pressable
             onPress={() => void exportOpml()}
             style={({ pressed }) => [styles.opmlBtn, pressed && { opacity: 0.88 }]}
           >
             <Ionicons name="share-outline" size={18} color={palette.accent} />
-            <Text style={styles.opmlBtnText}>Exporter</Text>
+            <Text style={styles.opmlBtnText}>{t('subscriptions.exportOpml')}</Text>
           </Pressable>
           <Pressable
             onPress={() => void importOpml()}
             style={({ pressed }) => [styles.opmlBtn, pressed && { opacity: 0.88 }]}
           >
             <Ionicons name="download-outline" size={18} color={palette.accent} />
-            <Text style={styles.opmlBtnText}>Importer</Text>
+            <Text style={styles.opmlBtnText}>{t('subscriptions.importOpml')}</Text>
           </Pressable>
         </View>
-
-        <Text style={styles.sectionLabel}>Flux suivis ({subscriptions.length})</Text>
-        {subscriptions.map((s) => (
-          <View key={s.id} style={styles.subRow}>
-            <View style={styles.subText}>
-              <Text style={styles.subTitle}>{s.title}</Text>
-              <Text style={styles.subUrl} numberOfLines={2}>
-                {s.url}
-              </Text>
-            </View>
-            <Pressable
-              accessibilityLabel={`Retirer ${s.title}`}
-              onPress={() => confirmRemove(s.title, s.id)}
-              style={({ pressed }) => [styles.trash, pressed && { opacity: 0.75 }]}
-            >
-              <Ionicons name="trash-outline" size={22} color={palette.danger} />
-            </Pressable>
-          </View>
-        ))}
-
-        <Pressable
-          onPress={confirmReset}
-          style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.85 }]}
-        >
-          <Text style={styles.secondaryText}>Réinitialiser les flux par défaut</Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -204,6 +318,72 @@ function createSubscriptionsStyles(palette: AppPalette) {
     title: { ...typography.title, color: palette.text },
     subtitle: { ...typography.body, color: palette.textMuted, marginTop: spacing.xs },
     scroll: { paddingBottom: spacing.xl },
+    emptyHint: {
+      ...typography.caption,
+      color: palette.textMuted,
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    sectionHint: {
+      ...typography.caption,
+      color: palette.textMuted,
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+      lineHeight: 18,
+    },
+    searchInput: {
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 12,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      minHeight: 44,
+      color: palette.text,
+      backgroundColor: palette.surfaceElevated,
+    },
+    topicCard: {
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: 16,
+      backgroundColor: palette.surface,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    topicHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      minHeight: 44,
+      paddingVertical: spacing.xs,
+    },
+    topicHeaderText: { flex: 1 },
+    topicTitle: { ...typography.subtitle, color: palette.text, marginBottom: 2 },
+    topicDesc: { ...typography.caption, color: palette.textMuted },
+    feedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.sm,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: palette.border,
+    },
+    feedRowText: { flex: 1 },
+    feedName: { ...typography.body, color: palette.text },
+    feedUrl: { ...typography.caption, color: palette.textMuted },
+    addBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: palette.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addBtnPressed: { opacity: 0.85 },
+    addedBtn: { backgroundColor: palette.surfaceElevated },
     form: {
       marginHorizontal: spacing.md,
       padding: spacing.md,
@@ -220,6 +400,7 @@ function createSubscriptionsStyles(palette: AppPalette) {
       borderRadius: 12,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
+      minHeight: 44,
       color: palette.text,
       backgroundColor: palette.surfaceElevated,
     },
@@ -229,6 +410,7 @@ function createSubscriptionsStyles(palette: AppPalette) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: spacing.sm,
+      minHeight: 48,
       backgroundColor: palette.accent,
       paddingVertical: spacing.md,
       borderRadius: 12,
@@ -247,6 +429,7 @@ function createSubscriptionsStyles(palette: AppPalette) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: spacing.xs,
+      minHeight: 48,
       paddingVertical: spacing.md,
       borderRadius: 12,
       borderWidth: 1,
@@ -276,12 +459,19 @@ function createSubscriptionsStyles(palette: AppPalette) {
     subText: { flex: 1 },
     subTitle: { ...typography.body, color: palette.text },
     subUrl: { ...typography.caption, color: palette.textMuted, marginTop: 4 },
-    trash: { padding: spacing.xs },
+    trash: {
+      width: 44,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     secondaryBtn: {
       marginHorizontal: spacing.md,
-      marginTop: spacing.lg,
+      marginTop: spacing.sm,
+      minHeight: 44,
       padding: spacing.md,
       alignItems: 'center',
+      justifyContent: 'center',
       borderRadius: 12,
       borderWidth: 1,
       borderColor: palette.border,

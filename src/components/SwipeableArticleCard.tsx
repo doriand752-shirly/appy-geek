@@ -7,7 +7,9 @@ import { ArticleCard } from './ArticleCard';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 import type { ParsedArticle } from '../types/article';
+import { hapticLight } from '../utils/haptics';
 
 type Props = {
   article: ParsedArticle;
@@ -21,6 +23,9 @@ type Props = {
   onToggleFavorite: () => void;
   onMarkRead: () => void;
   onOpenSource?: () => void;
+  commentCount?: number;
+  showCommentCount?: boolean;
+  paneActive?: boolean;
 };
 
 function SwipeableArticleCardInner({
@@ -35,8 +40,12 @@ function SwipeableArticleCardInner({
   onToggleFavorite,
   onMarkRead,
   onOpenSource,
+  commentCount = 0,
+  showCommentCount = false,
+  paneActive = false,
 }: Props) {
   const { palette } = useAppSettings();
+  const { t } = useTranslation();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const swipeRef = useRef<Swipeable>(null);
 
@@ -52,14 +61,16 @@ function SwipeableArticleCardInner({
     return (
       <RectButton
         style={styles.swipeRead}
+        accessibilityLabel={t('article.markReadShort')}
         onPress={() => {
           swipeRef.current?.close();
+          hapticLight();
           onMarkRead();
         }}
       >
         <Animated.View style={{ transform: [{ scale }] }}>
           <Ionicons name="checkmark-circle-outline" size={26} color={palette.onAccent} />
-          <Text style={styles.swipeLabel}>Lu</Text>
+          <Text style={styles.swipeLabel}>{t('article.markReadShort')}</Text>
         </Animated.View>
       </RectButton>
     );
@@ -72,7 +83,8 @@ function SwipeableArticleCardInner({
           onPress={onToggleSelect}
           hitSlop={8}
           style={({ pressed }) => [styles.selectCol, pressed && { opacity: 0.85 }]}
-          accessibilityLabel={selected ? 'Désélectionner' : 'Sélectionner'}
+          accessibilityRole="button"
+          accessibilityLabel={selected ? t('selection.deselect') : t('selection.select')}
         >
           <Ionicons
             name={selected ? 'checkmark-circle' : 'ellipse-outline'}
@@ -86,7 +98,9 @@ function SwipeableArticleCardInner({
           article={article}
           read={read}
           favorite={favorite}
-          highlighted={selectionMode && selected}
+          highlighted={(selectionMode && selected) || paneActive}
+          commentCount={commentCount}
+          showCommentCount={showCommentCount}
           onPress={selectionMode ? onToggleSelect : onOpen}
           onLongPress={selectionMode ? undefined : onLongPress}
           onToggleFavorite={onToggleFavorite}
@@ -126,6 +140,9 @@ function createStyles(palette: AppPalette) {
     },
     selectCol: {
       justifyContent: 'center',
+      alignItems: 'center',
+      minWidth: 44,
+      minHeight: 44,
       paddingLeft: spacing.md,
       paddingRight: spacing.xs,
     },

@@ -1,3 +1,5 @@
+import { isExcerptOnlyArticleUrl } from './articleSourceRules';
+
 /**
  * Heuristiques pour éviter de traiter un extrait RSS de quelques lignes
  * comme un « article complet » et sauter la récupération sur la page.
@@ -14,7 +16,11 @@ const LIKELY_COMPLETE_MIN_STRIP = 880;
 /**
  * Le flux semble fournir tout l’article (évite un fetch inutile et les faux positifs « extrait »).
  */
-export function rssBodyLikelyComplete(html: string | undefined): boolean {
+export function rssBodyLikelyComplete(
+  html: string | undefined,
+  articleUrl?: string,
+): boolean {
+  if (isExcerptOnlyArticleUrl(articleUrl)) return false;
   if (!html || html.trim().length < 52) return false;
   const strip = strippedArticleTextLen(html);
   if (strip >= LIKELY_COMPLETE_MIN_STRIP) return true;
@@ -29,12 +35,14 @@ export function rssBodyLikelyComplete(html: string | undefined): boolean {
 export function pickRicherArticleHtml(
   rss: string | undefined,
   page: string | undefined,
+  articleUrl?: string,
 ): string | undefined {
   const a = rss?.trim() || '';
   const b = page?.trim() || '';
   if (!a && !b) return undefined;
   if (!a) return page;
   if (!b) return rss;
+  if (isExcerptOnlyArticleUrl(articleUrl) && b) return page;
   const la = strippedArticleTextLen(a);
   const lb = strippedArticleTextLen(b);
   if (lb > la + 100) return page;

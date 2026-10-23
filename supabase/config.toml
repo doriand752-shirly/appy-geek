@@ -1,0 +1,19 @@
+# Appigeek — Supabase project
+project_id = "ppnejmwvmkqnmrzcivqs"
+
+[api]
+enabled = true
+
+[functions.digest-push]
+# JWT désactivé : pg_cron + secret partagé (x-digest-secret / DIGEST_PUSH_SECRET)
+verify_jwt = false
+
+[functions.sync-store-metrics]
+# JWT désactivé : pg_cron + même secret digest (x-digest-secret)
+verify_jwt = false
+
+[functions.article-summary]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true

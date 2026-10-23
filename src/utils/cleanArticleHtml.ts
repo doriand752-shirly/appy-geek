@@ -11,6 +11,7 @@
  * - Préparation des images pour RN : `prepareArticleImagesForRn` (importé ici, logique dans son module).
  */
 
+import { hostFromArticleUrl, ruleForArticleUrl } from './articleSourceRules';
 import { prepareArticleImagesForRn } from './prepareArticleImagesForRn';
 
 /** Supprime tous les blocs équilibrés pour une balise donnée (aside, nav, form…). */
@@ -174,12 +175,38 @@ const NOISE_CLASS_FRAGMENTS = [
   'shop-block',
   'humanoid-inread',
   'wp-block-humanoid',
+  /* iPhon.fr : partage social, auteur, tags */
+  'mvp-post-soc',
+  'mvp-author',
+  'gtm-post-soc',
+  'mvp-post-tags',
+  'mvp-post-head',
+  'mvp-post-feat-img',
+  /* Phonandroid : encarts auteur */
+  'author-box',
+  'post-author',
   /* Encarts « Sponsorisé » / marque (Humanoid, Numerama…) */
   'contenu-sponsorise',
   'contenu-sponsoris',
   'sponsor-label',
   'native-banner',
   'brand-partner',
+  /* BeGeek : bio auteur, CTA Google, « À découvrir », partage de fin */
+  'article-end',
+  'google-cta',
+  'discover',
+  /* Consomac : réactions forum + barre de partage */
+  'reaction-bloc',
+  'news-share',
+  /* iPhoneSoft : partage, méta auteur, badge Google, suite d’articles */
+  'post-share',
+  'post-info',
+  'post-tag',
+  'google-preferred-source',
+  'underpost',
+  'nexus-insert',
+  'memesujet',
+  'depeche-h2',
 ];
 
 function escapeRegexClassFragment(s: string): string {
@@ -839,10 +866,127 @@ function collapseWhitespace(html: string): string {
     .trim();
 }
 
-export function cleanArticleHtml(html: string): string {
+/** Retire avatars Gravatar et images de profil auteur (souvent énormes sans CSS du site). */
+function removeAuthorAvatarImages(html: string): string {
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    if (/gravatar\.com|secure\.gravatar/i.test(tag)) return '';
+    if (/\bclass=["'][^"']*\bavatar\b/i.test(tag) && /gravatar|\/avatar\//i.test(tag)) return '';
+    return tag;
+  });
+}
+
+/** iPhon.fr : le wrapper #mvp-post-content inclut en-tête, image hero et partage — on le découpe si besoin. */
+function trimIphonPostWrapper(html: string): string {
+  const main = /<div\b[^>]*\bid=["']mvp-content-main["'][^>]*>([\s\S]*?)<\/div>/i.exec(html);
+  if (main?.[1] && main[1].trim().length > 120) return main[1];
+  return html;
+}
+
+/** ZDNet / BeGeek : titres et fil d’Ariane en tête du bloc #content. */
+function removeDuplicateArticleChrome(html: string): string {
+  let out = html;
+  out = out.replace(/<ol\b[^>]*\bbreadcrumb\b[^>]*>[\s\S]*?<\/ol>/gi, '');
+  out = out.replace(/<div\b[^>]*>\s*<ol\b[^>]*\bbreadcrumb\b[^>]*>[\s\S]*?<\/ol>\s*<\/div>/gi, '');
+  out = out.replace(/<h1\b[^>]*>[\s\S]*?<\/h1>/i, '');
+  out = out.replace(/<header\b[^>]*>[\s\S]*?<\/header>/i, '');
+  return out;
+}
+
+/** Blocs pub / partage courts avec liens X, Facebook, partage d’article. */
+function removeSocialShareBlocks(html: string): string {
+  if (html.length > 55_000) return html;
+  let result = html;
+  const tags = ['div', 'section', 'p', 'ul'] as const;
+  for (const tag of tags) {
+    let guard = 0;
+    while (guard++ < 40) {
+      const openRe = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
+      let found: { start: number; removeEnd: number } | null = null;
+      let m: RegExpExecArray | null;
+      while ((m = openRe.exec(result)) !== null) {
+        const start = m.index;
+        const contentStart = start + m[0].length;
+        const range = findBalancedRange(result, contentStart, tag);
+        if (!range || range.inner.length > 6000) continue;
+        const inner = range.inner;
+        const plain = stripHtmlInner(inner);
+        if (plain.length > 900) continue;
+        const socialUrl =
+          /twitter\.com|x\.com\/intent|facebook\.com\/sharer|linkedin\.com\/share|whatsapp\.com\/send/i.test(
+            inner,
+          );
+        const shareLabel =
+          plain.length <= 220 &&
+          /partagez|partager cet article|share this|suivez-nous sur|follow us on/i.test(plain);
+        if (!socialUrl && !shareLabel) continue;
+        found = { start, removeEnd: range.afterClose };
+        break;
+      }
+      if (!found) break;
+      result = result.slice(0, found.start) + result.slice(found.removeEnd);
+    }
+  }
+  return result;
+}
+
+/** Consomac : bannières « fiche produit » injectées en tête des dépêches. */
+function removeConsomacProductTeasers(html: string): string {
+  return removeTaggedBlocksByClassFragment(html, 'div', 'texteanalyseproduit');
+}
+
+/** iPhoneSoft : pub in-article / slots vides qui laissent un trou. */
+function removeIphonesoftChrome(html: string): string {
+  let out = html;
+  out = removeTaggedBlocksByClassFragment(out, 'div', 'pub');
+  out = out.replace(/<ins\b[^>]*\bclass=["'][^"']*adsbygoogle[^"']*["'][^>]*>[\s\S]*?<\/ins>/gi, '');
+  out = out.replace(/<div\b[^>]*\bid=["']promo-one["'][^>]*>\s*<\/div>/gi, '');
+  out = out.replace(/<ul\b[^>]*\bclass=["'][^"']*post-share[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, '');
+  out = out.replace(/<ul\b[^>]*\bclass=["'][^"']*post-info[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, '');
+  out = out.replace(/<ul\b[^>]*\bclass=["'][^"']*post-tag[^"']*["'][^>]*>[\s\S]*?<\/ul>/gi, '');
+  out = out.replace(/<h1\b[^>]*>[\s\S]*?<\/h1>/i, '');
+  return out;
+}
+
+function applyHostArticleCleaning(html: string, pageUrl?: string): string {
+  const host = hostFromArticleUrl(pageUrl);
+  const rule = ruleForArticleUrl(pageUrl);
+  if (!host || !rule) return html;
+  let out = html;
+  if (host === 'iphon.fr' || host.endsWith('.iphon.fr')) {
+    out = trimIphonPostWrapper(out);
+  }
+  if (
+    host === 'zdnet.fr' ||
+    host.endsWith('.zdnet.fr') ||
+    host === 'begeek.fr' ||
+    host.endsWith('.begeek.fr')
+  ) {
+    out = removeDuplicateArticleChrome(out);
+    out = removeTaggedBlocksByClassFragment(out, 'div', 'nexus-insert');
+    out = out.replace(/<div\b[^>]*\bid=["']hit-inc-[^"']*["'][^>]*>\s*<\/div>/gi, '');
+  }
+  if (host === 'consomac.fr' || host.endsWith('.consomac.fr')) {
+    /*
+     * Dépêches : #newscontent + teaser .texteanalyseproduit à retirer.
+     * Fiches produit : le corps EST .texteanalyseproduit — ne pas le supprimer
+     * si #newscontent est absent du fragment.
+     */
+    if (/id=["']newscontent["']/i.test(out)) {
+      out = removeConsomacProductTeasers(out);
+    }
+  }
+  if (host === 'iphonesoft.fr' || host.endsWith('.iphonesoft.fr')) {
+    out = removeIphonesoftChrome(out);
+  }
+  out = removeAuthorAvatarImages(out);
+  out = removeSocialShareBlocks(out);
+  return out;
+}
+
+export function cleanArticleHtml(html: string, pageUrl?: string): string {
   if (!html || html.trim().length < 12) return html;
   let out = removeHtmlComments(html);
-  out = prepareArticleImagesForRn(out);
+  out = prepareArticleImagesForRn(out, pageUrl);
   out = removeBalancedTagBlocks(out, 'aside');
   out = removeBalancedTagBlocks(out, 'nav');
   out = removeBalancedTagBlocks(out, 'form');
@@ -869,6 +1013,7 @@ export function cleanArticleHtml(html: string): string {
   out = removePartnerAdBlocksByUrl(out);
   out = removeCommentRatingBlocksById(out);
   out = removePooolWidgetPlaceholder(out);
+  out = applyHostArticleCleaning(out, pageUrl);
   out = collapseWhitespace(out);
   return out;
 }

@@ -1,10 +1,13 @@
 import { useCallback, useState } from 'react';
 
+import { hapticLight } from '../utils/haptics';
+
 export function useArticleSelection() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const enterSelection = useCallback((articleId: string) => {
+    hapticLight();
     setSelectionMode(true);
     setSelectedIds(new Set([articleId]));
   }, []);

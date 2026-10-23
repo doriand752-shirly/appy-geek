@@ -6,15 +6,20 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 import type { ParsedArticle } from '../types/article';
 import { formatReadTime } from '../utils/estimateReadTime';
+import { formatCommentCountLabel } from '../utils/commentCountLabel';
 import { formatRelative } from '../utils/formatTime';
+import { hapticLight } from '../utils/haptics';
 
 type Props = {
   article: ParsedArticle;
   read: boolean;
   favorite?: boolean;
   highlighted?: boolean;
+  commentCount?: number;
+  showCommentCount?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   onToggleFavorite?: () => void;
@@ -26,12 +31,15 @@ export function ArticleCard({
   read,
   favorite = false,
   highlighted = false,
+  commentCount = 0,
+  showCommentCount = false,
   onPress,
   onLongPress,
   onToggleFavorite,
   onOpenSource,
 }: Props) {
-  const { palette } = useAppSettings();
+  const { palette, appLocale } = useAppSettings();
+  const { t } = useTranslation();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const disabled = !article.link;
   const readTime = formatReadTime(article);
@@ -78,14 +86,30 @@ export function ArticleCard({
           {article.summary}
         </Text>
       ) : null}
+      {showCommentCount ? (
+        <View style={styles.commentRow}>
+          <Ionicons
+            name={commentCount > 0 ? 'chatbubbles' : 'chatbubbles-outline'}
+            size={15}
+            color={commentCount > 0 ? palette.accentMuted : palette.textMuted}
+          />
+          <Text style={[styles.commentText, commentCount > 0 && styles.commentTextActive]}>
+            {formatCommentCountLabel(commentCount, appLocale)}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.footer}>
-        <Text style={styles.cta}>{disabled ? 'Lien indisponible' : 'Lire l’article'}</Text>
+        <Text style={styles.cta}>{disabled ? t('article.linkUnavailable') : t('article.read')}</Text>
         <View style={styles.actions}>
           {onToggleFavorite ? (
             <Pressable
-              onPress={onToggleFavorite}
+              onPress={() => {
+                hapticLight();
+                onToggleFavorite();
+              }}
               hitSlop={10}
-              accessibilityLabel={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              accessibilityRole="button"
+              accessibilityLabel={favorite ? t('article.removeFavorite') : t('article.addFavorite')}
               style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75 }]}
             >
               <Ionicons
@@ -99,7 +123,8 @@ export function ArticleCard({
             <Pressable
               onPress={openSource}
               hitSlop={10}
-              accessibilityLabel="Ouvrir sur le site source"
+              accessibilityRole="button"
+              accessibilityLabel={t('article.openSource')}
               style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.75 }]}
             >
               <Ionicons name="open-outline" size={20} color={palette.textMuted} />
@@ -149,6 +174,14 @@ function createStyles(palette: AppPalette) {
     title: { ...typography.subtitle, color: palette.text, marginBottom: spacing.xs },
     readTitle: { fontWeight: '500' as const },
     summary: { ...typography.body, color: palette.textMuted, marginBottom: spacing.sm },
+    commentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginBottom: spacing.sm,
+    },
+    commentText: { ...typography.caption, color: palette.textMuted },
+    commentTextActive: { color: palette.accentMuted, fontWeight: '600' as const },
     muted: { color: palette.textMuted },
     footer: {
       flexDirection: 'row',
@@ -157,6 +190,11 @@ function createStyles(palette: AppPalette) {
     },
     cta: { ...typography.caption, color: palette.accent, flex: 1 },
     actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-    iconBtn: { padding: 4 },
+    iconBtn: {
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
   });
 }

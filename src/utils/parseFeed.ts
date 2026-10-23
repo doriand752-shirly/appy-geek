@@ -1,6 +1,7 @@
 import he from 'he';
 
 import type { FeedSubscription, ParsedArticle } from '../types/article';
+import { hostFromArticleUrl, isExcerptOnlyHost } from './articleSourceRules';
 import { sanitizeArticleHtml } from './sanitizeArticleHtml';
 
 let cachedParser: InstanceType<(typeof import('fast-xml-parser'))['XMLParser']> | null = null;
@@ -143,47 +144,66 @@ function extractChapoFromAtomEntry(entry: Record<string, unknown>): string | und
 /**
  * Corps HTML à partir d’un item RSS : priorité `content:encoded`, sinon description riche.
  */
-function extractBodyFromRssItem(item: Record<string, unknown>): string | undefined {
+function extractBodyFromRssItem(
+  item: Record<string, unknown>,
+  articleLink: string,
+): string | undefined {
+  const host = hostFromArticleUrl(articleLink);
+  const excerptOnly = isExcerptOnlyHost(host);
   const keys = ['content:encoded', 'fullcontent'];
   for (const key of keys) {
     const node = item[key];
     const parts = ensureArray(node as object | object[]);
     for (const p of parts) {
       const raw = pickRawHtml(p).trim();
-      if (raw && isSubstantialEncodedHtml(raw)) return sanitizeArticleHtml(raw);
+      if (raw && isSubstantialEncodedHtml(raw)) {
+        return sanitizeArticleHtml(raw, articleLink || undefined);
+      }
     }
     const raw = pickRawHtml(node).trim();
-    if (raw && isSubstantialEncodedHtml(raw)) return sanitizeArticleHtml(raw);
+    if (raw && isSubstantialEncodedHtml(raw)) {
+      return sanitizeArticleHtml(raw, articleLink || undefined);
+    }
   }
+  if (excerptOnly) return undefined;
   const desc = pickRawHtml(item.description).trim();
   if (
     desc.length > 140 &&
     /<[a-z][\s\S]*>/i.test(desc) &&
     stripTagsLen(desc) >= 70
   ) {
-    return sanitizeArticleHtml(desc);
+    return sanitizeArticleHtml(desc, articleLink || undefined);
   }
   return undefined;
 }
 
 /** Atom : `content` puis `summary` si riche. */
-function extractBodyFromAtomEntry(entry: Record<string, unknown>): string | undefined {
+function extractBodyFromAtomEntry(
+  entry: Record<string, unknown>,
+  articleLink: string,
+): string | undefined {
+  const excerptOnly = isExcerptOnlyHost(hostFromArticleUrl(articleLink));
   const node = entry.content;
   const parts = ensureArray(node as object | object[]);
   for (const p of parts) {
     const raw = pickRawHtml(p).trim();
-    if (raw && isSubstantialEncodedHtml(raw)) return sanitizeArticleHtml(raw);
+    if (raw && isSubstantialEncodedHtml(raw)) {
+      return sanitizeArticleHtml(raw, articleLink || undefined);
+    }
   }
   const raw = pickRawHtml(node).trim();
-  if (raw && isSubstantialEncodedHtml(raw)) return sanitizeArticleHtml(raw);
+  if (raw && isSubstantialEncodedHtml(raw)) {
+    return sanitizeArticleHtml(raw, articleLink || undefined);
+  }
 
+  if (excerptOnly) return undefined;
   const summ = pickRawHtml(entry.summary).trim();
   if (
     summ.length > 140 &&
     /<[a-z][\s\S]*>/i.test(summ) &&
     stripTagsLen(summ) >= 70
   ) {
-    return sanitizeArticleHtml(summ);
+    return sanitizeArticleHtml(summ, articleLink || undefined);
   }
   return undefined;
 }
@@ -341,6 +361,7 @@ export async function fetchAndParseFeed(sub: FeedSubscription): Promise<ParsedAr
 
   if ('rss' in doc) return parseRss(doc.rss as Record<string, unknown>, sub);
   if ('feed' in doc) return parseAtom(doc.feed as Record<string, unknown>, sub);
+  if ('rdf:RDF' in doc) return parseRdf(doc['rdf:RDF'] as Record<string, unknown>, sub);
   return [];
 }
 
@@ -367,7 +388,7 @@ function parseRss(rss: Record<string, unknown>, sub: FeedSubscription): ParsedAr
         0,
         280,
       );
-    const bodyHtml = extractBodyFromRssItem(item);
+    const bodyHtml = extractBodyFromRssItem(item, link);
     const guidRaw = item.guid;
     const guid =
       typeof guidRaw === 'string'
@@ -376,6 +397,43 @@ function parseRss(rss: Record<string, unknown>, sub: FeedSubscription): ParsedAr
           ? pickText((guidRaw as Record<string, unknown>)['#text'])
           : '';
     const id = `${sub.id}:${guid || link || title}:${idx}`;
+    const imageUrl = extractImageFromRssItem(item);
+    return {
+      id,
+      title,
+      link,
+      publishedAt: parseRssDate(pubDate),
+      summary: desc,
+      chapoPlain,
+      imageUrl,
+      bodyHtml,
+      feedId: sub.id,
+      feedTitle: channelTitle,
+    };
+  });
+}
+
+/** RSS 1.0 / RDF (ex. iPhoneSoft via FeedBurner). */
+function parseRdf(rdf: Record<string, unknown>, sub: FeedSubscription): ParsedArticle[] {
+  const channel = (rdf.channel ?? {}) as Record<string, unknown>;
+  const channelTitle = decodeHtmlEntities(pickText(channel.title) || sub.title);
+  const items = ensureArray(rdf.item as object | object[]);
+
+  return items.map((raw, idx) => {
+    const item = raw as Record<string, unknown>;
+    const title = decodeHtmlEntities(pickText(item.title)) || 'Sans titre';
+    const link = pickText(item.link) || pickText(item['@_rdf:about']) || '';
+    const pubDate = pickText(item['dc:date']) || pickText(item['dc:Date']) || undefined;
+    const desc = stripHtml(pickText(item.description) || '').slice(0, 280);
+    const chapoPlain = (() => {
+      const flat = flattenXmlText(item.description).trim();
+      if (!flat) return undefined;
+      const plain = limitChapoText(stripHtml(flat));
+      return plain.length >= 15 ? plain : undefined;
+    })();
+    const bodyHtml = extractBodyFromRssItem(item, link);
+    const idField = link || title;
+    const id = `${sub.id}:${idField}:${idx}`;
     const imageUrl = extractImageFromRssItem(item);
     return {
       id,
@@ -406,7 +464,7 @@ function parseAtom(feed: Record<string, unknown>, sub: FeedSubscription): Parsed
       280,
     );
     const chapoPlain = extractChapoFromAtomEntry(entry);
-    const bodyHtml = extractBodyFromAtomEntry(entry);
+    const bodyHtml = extractBodyFromAtomEntry(entry, link);
     const idField = pickText(entry.id) || link || title;
     const id = `${sub.id}:${idField}:${idx}`;
     const imageUrl = extractImageFromAtomEntry(entry);

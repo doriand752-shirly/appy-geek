@@ -38,5 +38,6 @@ export const APP_AD_CONFIG = {
 
   /** Fallback Expo Go (pas de module natif AdMob) */
   fallbackUrl: 'https://expo.dev',
-  fallbackTitle: 'Soutenir l’application',
+  /** Fallback EN — l’UI affiche `t('ad.fallbackTitle')`. */
+  fallbackTitle: 'Support the app',
 } as const;

@@ -1,35 +1,31 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator, BottomTabBar } from '@react-navigation/bottom-tabs';
-import { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { BottomAdStrip } from '../components/BottomAdStrip';
 import { useAppSettings } from '../context/AppSettingsContext';
-import { useFeeds } from '../context/FeedsContext';
-import { DiscoverScreen } from '../screens/DiscoverScreen';
+import { useTranslation } from '../i18n';
+import { DiscussionsScreen } from '../screens/DiscussionsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SubscriptionsScreen } from '../screens/SubscriptionsScreen';
-import { countUnread } from '../utils/articleFilters';
+import { ThemesScreen } from '../screens/ThemesScreen';
 
 export type RootTabParamList = {
   Accueil: undefined;
-  Découvrir: undefined;
+  Thèmes: undefined;
+  Discussions: undefined;
   Abonnements: undefined;
   Paramètres: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
+/** BottomAdStrip sits on tab routes only; ArticleReader is on the root stack (no tab bar strip). */
+
 export function RootTabs() {
   const { palette } = useAppSettings();
-  const { articles, readIds } = useFeeds();
-
-  const homeUnreadBadge = useMemo(() => {
-    const n = countUnread(articles, readIds);
-    if (n <= 0) return undefined;
-    return n > 99 ? '99+' : n;
-  }, [articles, readIds]);
+  const { t } = useTranslation();
 
   return (
     <Tab.Navigator
@@ -55,18 +51,29 @@ export function RootTabs() {
         name="Accueil"
         component={HomeScreen}
         options={{
-          tabBarBadge: homeUnreadBadge,
+          tabBarLabel: t('tabs.home'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
         }}
       />
       <Tab.Screen
-        name="Découvrir"
-        component={DiscoverScreen}
+        name="Thèmes"
+        component={ThemesScreen}
         options={{
+          tabBarLabel: t('tabs.themes'),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="compass-outline" size={size} color={color} />
+            <Ionicons name="grid-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Discussions"
+        component={DiscussionsScreen}
+        options={{
+          tabBarLabel: t('tabs.discussions'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles-outline" size={size} color={color} />
           ),
         }}
       />
@@ -74,8 +81,9 @@ export function RootTabs() {
         name="Abonnements"
         component={SubscriptionsScreen}
         options={{
+          tabBarLabel: t('tabs.subscriptions'),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list-outline" size={size} color={color} />
+            <Ionicons name="compass-outline" size={size} color={color} />
           ),
         }}
       />
@@ -83,6 +91,7 @@ export function RootTabs() {
         name="Paramètres"
         component={SettingsScreen}
         options={{
+          tabBarLabel: t('tabs.settings'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings-outline" size={size} color={color} />
           ),

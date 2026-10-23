@@ -4,10 +4,11 @@ export type ReaderDefaultView = 'preview' | 'full';
 /** Taille du texte dans le lecteur d’articles. */
 export type ReaderFontSize = 'small' | 'medium' | 'large';
 
+/** `label` is an English fallback; UI must use `t(readerFontSizeTranslationKey(id))`. */
 export const READER_FONT_SIZE_OPTIONS: { id: ReaderFontSize; label: string; bodySize: number; lineHeight: number }[] = [
-  { id: 'small', label: 'Petite', bodySize: 14, lineHeight: 22 },
-  { id: 'medium', label: 'Normale', bodySize: 16, lineHeight: 26 },
-  { id: 'large', label: 'Grande', bodySize: 19, lineHeight: 30 },
+  { id: 'small', label: 'Small', bodySize: 14, lineHeight: 22 },
+  { id: 'medium', label: 'Medium', bodySize: 16, lineHeight: 26 },
+  { id: 'large', label: 'Large', bodySize: 19, lineHeight: 30 },
 ];
 
 /** Nombre d’articles à conserver en local pour la lecture hors ligne. */

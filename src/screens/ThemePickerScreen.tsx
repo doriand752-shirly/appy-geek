@@ -17,6 +17,7 @@ import { ALL_THEME_IDS, NEWS_THEMES } from '../constants/newsThemes';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ThemePicker'>;
@@ -32,6 +33,7 @@ export function ThemePickerScreen(_props: Props) {
     removeCustomTheme,
     palette,
   } = useAppSettings();
+  const { t } = useTranslation();
 
   const styles = useMemo(() => createThemePickerStyles(palette), [palette]);
 
@@ -55,29 +57,22 @@ export function ThemePickerScreen(_props: Props) {
 
   const confirmRemoveCustom = useCallback(
     (id: string, label: string) => {
-      Alert.alert(
-        'Supprimer ce thème',
-        `« ${label} » sera retiré. Les articles restent dans le fil général.`,
-        [
-          { text: 'Annuler', style: 'cancel' },
-          {
-            text: 'Supprimer',
-            style: 'destructive',
-            onPress: () => void removeCustomTheme(id),
-          },
-        ],
-      );
+      Alert.alert(t('themePicker.removeTitle'), t('themePicker.removeMessage', { label }), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('themePicker.removeConfirm'),
+          style: 'destructive',
+          onPress: () => void removeCustomTheme(id),
+        },
+      ]);
     },
-    [removeCustomTheme],
+    [removeCustomTheme, t],
   );
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.intro}>
-          Activez les tuiles sous « Par thème » sur l’accueil. Ajoutez vos propres thèmes : les
-          articles sont rangés dans une tuile si leur titre contient le nom que vous avez choisi.
-        </Text>
+        <Text style={styles.intro}>{t('themePicker.intro')}</Text>
         <View style={styles.actions}>
           <Pressable
             onPress={() => void selectAllThemes()}
@@ -87,7 +82,9 @@ export function ThemePickerScreen(_props: Props) {
               pressed && styles.btnPressed,
             ]}
           >
-            <Text style={allThemesOn ? styles.btnText : styles.btnTextMuted}>Tout activer</Text>
+            <Text style={allThemesOn ? styles.btnText : styles.btnTextMuted}>
+              {t('themePicker.enableAll')}
+            </Text>
           </Pressable>
           <Pressable
             onPress={() => void clearAllThemes()}
@@ -97,34 +94,31 @@ export function ThemePickerScreen(_props: Props) {
               pressed && styles.btnPressed,
             ]}
           >
-            <Text style={allThemesOff ? styles.btnText : styles.btnTextMuted}>Tout désactiver</Text>
+            <Text style={allThemesOff ? styles.btnText : styles.btnTextMuted}>
+              {t('themePicker.disableAll')}
+            </Text>
           </Pressable>
         </View>
         <Text style={styles.counter}>
-          {activeCount} / {total} thème{total > 1 ? 's' : ''} visible{activeCount > 1 ? 's' : ''}
+          {t('themePicker.counter', { count: activeCount, total })}
         </Text>
         {activeCount === 0 ? (
           <View style={styles.warn}>
             <Ionicons name="information-circle-outline" size={20} color={palette.accentMuted} />
-            <Text style={styles.warnText}>
-              Aucune tuile sur l’accueil : ajoutez au moins un thème ou rouvrez « Tout activer ».
-            </Text>
+            <Text style={styles.warnText}>{t('themePicker.warnNone')}</Text>
           </View>
         ) : null}
 
-        <Text style={styles.sectionLabel}>Thème personnalisé</Text>
+        <Text style={styles.sectionLabel}>{t('themePicker.customSection')}</Text>
         <View style={styles.formCard}>
-          <Text style={styles.formHint}>
-            Un ou plusieurs mots : tout article dont le titre les contient sera classé ici (comme
-            pour les thèmes intégrés).
-          </Text>
+          <Text style={styles.formHint}>{t('themePicker.customHint')}</Text>
           <TextInput
             value={draftLabel}
-            onChangeText={(t) => {
-              setDraftLabel(t);
+            onChangeText={(text) => {
+              setDraftLabel(text);
               if (addError) setAddError(null);
             }}
-            placeholder="Ex. Steam Deck, Rust, Framework Laptop…"
+            placeholder={t('themePicker.customPlaceholder')}
             placeholderTextColor={palette.textMuted}
             style={styles.input}
             maxLength={80}
@@ -137,13 +131,15 @@ export function ThemePickerScreen(_props: Props) {
             style={({ pressed }) => [styles.addBtn, pressed && styles.btnPressed]}
           >
             <Ionicons name="add-circle-outline" size={20} color={palette.onAccent} />
-            <Text style={styles.addBtnText}>Ajouter ce thème</Text>
+            <Text style={styles.addBtnText}>{t('themePicker.addTheme')}</Text>
           </Pressable>
         </View>
 
         {customThemes.length > 0 ? (
           <>
-            <Text style={styles.sectionLabel}>Mes thèmes ({customThemes.length})</Text>
+            <Text style={styles.sectionLabel}>
+              {t('themePicker.myThemes', { count: customThemes.length })}
+            </Text>
             {customThemes.map((theme) => {
               const on = selectedThemeIds.includes(theme.id);
               return (
@@ -151,13 +147,13 @@ export function ThemePickerScreen(_props: Props) {
                   <View style={styles.rowText}>
                     <Text style={styles.themeLabel}>{theme.label}</Text>
                     <Text style={styles.themeHint} numberOfLines={2}>
-                      Correspondance par mots du titre.
+                      {t('themePicker.customMatchHint')}
                     </Text>
                   </View>
                   <Pressable
                     onPress={() => confirmRemoveCustom(theme.id, theme.label)}
                     style={({ pressed }) => [styles.trashBtn, pressed && { opacity: 0.75 }]}
-                    accessibilityLabel="Supprimer le thème"
+                    accessibilityLabel={t('themePicker.removeA11y')}
                   >
                     <Ionicons name="trash-outline" size={22} color={palette.danger} />
                   </Pressable>
@@ -174,7 +170,7 @@ export function ThemePickerScreen(_props: Props) {
           </>
         ) : null}
 
-        <Text style={styles.sectionLabel}>Thèmes intégrés</Text>
+        <Text style={styles.sectionLabel}>{t('themePicker.builtinSection')}</Text>
         {NEWS_THEMES.map((theme) => {
           const on = selectedThemeIds.includes(theme.id);
           return (
@@ -182,7 +178,7 @@ export function ThemePickerScreen(_props: Props) {
               <View style={styles.rowText}>
                 <Text style={styles.themeLabel}>{theme.label}</Text>
                 <Text style={styles.themeHint} numberOfLines={2}>
-                  Classés par mots-clés dans le titre des articles.
+                  {t('themePicker.builtinMatchHint')}
                 </Text>
               </View>
               <Switch

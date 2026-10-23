@@ -10,16 +10,20 @@ import React, {
   useState,
 } from 'react';
 
-import { DEFAULT_SUBSCRIPTIONS } from '../constants/suggestedFeeds';
+import { getDefaultSubscriptions } from '../constants/suggestedFeedsByLocale';
 import type { FeedSubscription, ParsedArticle } from '../types/article';
-import { loadCachedArticlesList, saveCachedArticlesList } from '../utils/articlesListCache';
-import { getOfflineCacheCount, syncOfflineArticles } from '../utils/offlineCache';
+import { translate } from '../i18n/translations';
+import { loadCachedArticlesList, clearArticlesListCache, pruneArticlesList, saveCachedArticlesList } from '../utils/articlesListCache';
+import { clearOfflineCache, getOfflineCacheCount, syncOfflineArticles } from '../utils/offlineCache';
 import { subscriptionsToOpml } from '../utils/opml';
 import { fetchAndParseFeed } from '../utils/parseFeed';
+import type { AppLocale } from '../i18n/types';
 import {
   fixMac4everSubscriptionUrls,
   missingDefaultFeeds,
   stripGenericSubscriptions,
+  stripNonLocaleSubscriptions,
+  stripRemovedSubscriptions,
 } from '../utils/subscriptionMigration';
 
 import { useAppSettings } from './AppSettingsContext';
@@ -45,12 +49,19 @@ type FeedsContextValue = {
   favoriteIds: Set<string>;
   loading: boolean;
   refreshing: boolean;
+  /** Téléchargement RSS en cours (y compris actualisation silencieuse). */
+  fetching: boolean;
+  /** Progression du fetch courant, 0–1 (par flux terminé). */
+  fetchProgress: number;
+  /** Premier fetch réseau terminé depuis le lancement de l’app. */
+  initialFetchDone: boolean;
+  hydrated: boolean;
   error: string | null;
   lastUpdated: number | null;
   offlineSyncing: boolean;
   offlineCachedCount: number;
   syncOfflineNow: () => Promise<number>;
-  refresh: () => Promise<void>;
+  refresh: (options?: RefreshOptions) => Promise<void>;
   addSubscription: (title: string, url: string) => Promise<void>;
   removeSubscription: (id: string) => Promise<void>;
   importSubscriptions: (feeds: { title: string; url: string }[]) => Promise<number>;
@@ -58,7 +69,16 @@ type FeedsContextValue = {
   markAllRead: (articleIds: string[]) => Promise<void>;
   toggleFavorite: (articleId: string) => Promise<void>;
   resetToDefaults: () => Promise<void>;
+  /** Bascule les abonnements et le fil sur le catalogue de la langue cible. */
+  switchLocaleFeeds: (locale: AppLocale) => Promise<void>;
   getExportOpml: () => string;
+  /** Applique un état cloud fusionné (abonnements + lus + favoris). */
+  applyRemoteSync: (input: {
+    subscriptions: FeedSubscription[];
+    readIds: string[];
+    favoriteIds: string[];
+  }) => Promise<void>;
+  addLocaleRecommendedFeeds: () => Promise<number>;
 };
 
 const FeedsContext = createContext<FeedsContextValue | null>(null);
@@ -92,13 +112,17 @@ function mergeArticles(
 }
 
 export function FeedsProvider({ children }: { children: React.ReactNode }) {
-  const { offlineCacheEnabled, offlineCacheLimit } = useAppSettings();
+  const { offlineCacheEnabled, offlineCacheLimit, appLocale, hydrated: settingsHydrated } =
+    useAppSettings();
   const [subscriptions, setSubscriptions] = useState<FeedSubscription[]>([]);
   const [articles, setArticles] = useState<ParsedArticle[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchProgress, setFetchProgress] = useState(0);
+  const [initialFetchDone, setInitialFetchDone] = useState(false);
   const [offlineSyncing, setOfflineSyncing] = useState(false);
   const [offlineCachedCount, setOfflineCachedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -111,11 +135,16 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
   articlesRef.current = articles;
   const initialRefreshStarted = useRef(false);
   const offlineSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localeAtHydration = useRef(appLocale);
+  localeAtHydration.current = appLocale;
 
   useEffect(() => {
+    if (!settingsHydrated) return;
     let cancelled = false;
+    const locale = localeAtHydration.current;
     (async () => {
       try {
+        const defaults = getDefaultSubscriptions(locale);
         const [rawSubs, rawRead, rawFav, cachedList] = await Promise.all([
           AsyncStorage.getItem(STORAGE_SUBS),
           AsyncStorage.getItem(STORAGE_READ),
@@ -135,7 +164,25 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
           parsed = fixed;
           const { subs: noGeneric, changed: genericStripped } = stripGenericSubscriptions(parsed);
           parsed = noGeneric;
-          const toAdd = missingDefaultFeeds(parsed);
+          const {
+            subs: noRemoved,
+            changed: removedStripped,
+            removedFeedIds,
+          } = stripRemovedSubscriptions(parsed);
+          parsed = noRemoved;
+          const {
+            subs: localeOnly,
+            changed: localeStripped,
+            removedFeedIds: localeRemovedIds,
+          } = stripNonLocaleSubscriptions(parsed, locale);
+          parsed = localeOnly;
+          const allRemovedIds = new Set([...removedFeedIds, ...localeRemovedIds]);
+          if ((removedStripped || localeStripped) && cachedList.articles.length) {
+            const pruned = cachedList.articles.filter((a) => !allRemovedIds.has(a.feedId));
+            setArticles(pruned);
+            if (cachedList.lastUpdated) setLastUpdated(cachedList.lastUpdated);
+          }
+          const toAdd = missingDefaultFeeds(parsed, locale);
           if (toAdd.length) {
             for (const f of toAdd) {
               parsed.push({
@@ -145,20 +192,20 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
               });
             }
           }
-          if (urlFixed || genericStripped || toAdd.length) {
+          if (urlFixed || genericStripped || removedStripped || localeStripped || toAdd.length) {
             await AsyncStorage.setItem(STORAGE_SUBS, JSON.stringify(parsed));
           }
           setSubscriptions(parsed);
         } else {
-          const defaults: FeedSubscription[] = await Promise.all(
-            DEFAULT_SUBSCRIPTIONS.map(async (f) => ({
+          const defaultsSubs: FeedSubscription[] = await Promise.all(
+            defaults.map(async (f) => ({
               id: await stableIdFromUrl(f.url),
               title: f.title,
               url: f.url,
             })),
           );
-          setSubscriptions(defaults);
-          await AsyncStorage.setItem(STORAGE_SUBS, JSON.stringify(defaults));
+          setSubscriptions(defaultsSubs);
+          await AsyncStorage.setItem(STORAGE_SUBS, JSON.stringify(defaultsSubs));
         }
         if (rawRead) {
           const arr = JSON.parse(rawRead) as string[];
@@ -169,7 +216,7 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
           setFavoriteIds(new Set(arr));
         }
       } catch {
-        setError('Impossible de charger vos données locales.');
+        setError(translate(locale, 'feeds.loadError'));
       } finally {
         if (!cancelled) {
           setHydrated(true);
@@ -180,7 +227,7 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [settingsHydrated]);
 
   const persistSubs = async (subs: FeedSubscription[]) => {
     await AsyncStorage.setItem(STORAGE_SUBS, JSON.stringify(subs));
@@ -243,7 +290,17 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
       if (!subsToFetch.length) return articlesRef.current;
 
       const replaceIds = new Set(subsToFetch.map((s) => s.id));
-      const results = await Promise.allSettled(subsToFetch.map((s) => fetchAndParseFeed(s)));
+      const total = subsToFetch.length;
+      let completed = 0;
+      setFetchProgress(0);
+      const results = await Promise.allSettled(
+        subsToFetch.map((s) =>
+          fetchAndParseFeed(s).finally(() => {
+            completed += 1;
+            setFetchProgress(completed / total);
+          }),
+        ),
+      );
       const incoming: ParsedArticle[] = [];
       const errors: string[] = [];
       results.forEach((r, i) => {
@@ -252,11 +309,12 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
       });
 
       const merged = mergeArticles(articlesRef.current, incoming, replaceIds);
-      setArticles(merged);
-      articlesRef.current = merged;
+      const pruned = pruneArticlesList(merged);
+      setArticles(pruned);
+      articlesRef.current = pruned;
       const now = Date.now();
       setLastUpdated(now);
-      void saveCachedArticlesList(merged, now);
+      void saveCachedArticlesList(pruned, now);
 
       if (errors.length) {
         const total = subscriptionsRef.current.length;
@@ -269,8 +327,8 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
         setError(null);
       }
 
-      scheduleOfflineSyncStable(merged);
-      return merged;
+      scheduleOfflineSyncStable(pruned);
+      return pruned;
     },
     [scheduleOfflineSyncStable],
   );
@@ -283,16 +341,23 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
         articlesRef.current = [];
         setLastUpdated(Date.now());
         setRefreshing(false);
+        setFetching(false);
+        setFetchProgress(1);
+        setInitialFetchDone(true);
         setError(null);
         return;
       }
 
       const background = options?.background ?? false;
       if (!background) setRefreshing(true);
+      setFetching(true);
+      setFetchProgress(0);
 
       try {
         await fetchFeedsIntoState(subs, options);
       } finally {
+        setFetching(false);
+        setInitialFetchDone(true);
         if (!background) setRefreshing(false);
       }
     },
@@ -417,25 +482,95 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetToDefaults = useCallback(async () => {
-    const defaults: FeedSubscription[] = await Promise.all(
-      DEFAULT_SUBSCRIPTIONS.map(async (f) => ({
+    const localeDefaults = getDefaultSubscriptions(appLocale);
+    const defaultsSubs: FeedSubscription[] = await Promise.all(
+      localeDefaults.map(async (f) => ({
         id: await stableIdFromUrl(f.url),
         title: f.title,
         url: f.url,
       })),
     );
-    setSubscriptions(defaults);
-    subscriptionsRef.current = defaults;
-    await persistSubs(defaults);
+    setSubscriptions(defaultsSubs);
+    subscriptionsRef.current = defaultsSubs;
+    await persistSubs(defaultsSubs);
     setReadIds(new Set());
     setFavoriteIds(new Set());
     await AsyncStorage.multiRemove([STORAGE_READ, STORAGE_FAVORITES]);
     void refresh({ background: false });
-  }, [refresh]);
+  }, [appLocale, refresh]);
+
+  const switchLocaleFeeds = useCallback(
+    async (locale: AppLocale) => {
+      const localeDefaults = getDefaultSubscriptions(locale);
+      const defaultsSubs: FeedSubscription[] = await Promise.all(
+        localeDefaults.map(async (f) => ({
+          id: await stableIdFromUrl(f.url),
+          title: f.title,
+          url: f.url,
+        })),
+      );
+      setSubscriptions(defaultsSubs);
+      subscriptionsRef.current = defaultsSubs;
+      await persistSubs(defaultsSubs);
+      setArticles([]);
+      articlesRef.current = [];
+      setLastUpdated(null);
+      setReadIds(new Set());
+      setFavoriteIds(new Set());
+      await AsyncStorage.multiRemove([STORAGE_READ, STORAGE_FAVORITES]);
+      await clearArticlesListCache();
+      await clearOfflineCache();
+      setOfflineCachedCount(0);
+      void refresh({ background: false });
+    },
+    [refresh],
+  );
+
+  const addLocaleRecommendedFeeds = useCallback(async (): Promise<number> => {
+    const toAdd = missingDefaultFeeds(subscriptionsRef.current, appLocale);
+    if (!toAdd.length) return 0;
+    let added = 0;
+    const next = [...subscriptionsRef.current];
+    for (const f of toAdd) {
+      const id = await stableIdFromUrl(f.url);
+      if (next.some((s) => s.id === id)) continue;
+      next.push({ id, title: f.title, url: f.url });
+      added += 1;
+    }
+    if (!added) return 0;
+    setSubscriptions(next);
+    subscriptionsRef.current = next;
+    await persistSubs(next);
+    void refresh({ background: true, feeds: next.slice(-added) });
+    return added;
+  }, [appLocale, refresh]);
 
   const getExportOpml = useCallback(
     () => subscriptionsToOpml(subscriptions),
     [subscriptions],
+  );
+
+  const applyRemoteSync = useCallback(
+    async (input: {
+      subscriptions: FeedSubscription[];
+      readIds: string[];
+      favoriteIds: string[];
+    }) => {
+      setSubscriptions(input.subscriptions);
+      subscriptionsRef.current = input.subscriptions;
+      await persistSubs(input.subscriptions);
+
+      const nextRead = new Set(input.readIds);
+      setReadIds(nextRead);
+      await persistRead(nextRead);
+
+      const nextFav = new Set(input.favoriteIds);
+      setFavoriteIds(nextFav);
+      await persistFavorites(nextFav);
+
+      void refresh({ background: true });
+    },
+    [refresh],
   );
 
   const value = useMemo(
@@ -446,28 +581,10 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
       favoriteIds,
       loading,
       refreshing,
-      error,
-      lastUpdated,
-      offlineSyncing,
-      offlineCachedCount,
-      syncOfflineNow,
-      refresh: () => refresh(),
-      addSubscription,
-      removeSubscription,
-      importSubscriptions,
-      markRead,
-      markAllRead,
-      toggleFavorite,
-      resetToDefaults,
-      getExportOpml,
-    }),
-    [
-      subscriptions,
-      articles,
-      readIds,
-      favoriteIds,
-      loading,
-      refreshing,
+      fetching,
+      fetchProgress,
+      initialFetchDone,
+      hydrated,
       error,
       lastUpdated,
       offlineSyncing,
@@ -481,7 +598,39 @@ export function FeedsProvider({ children }: { children: React.ReactNode }) {
       markAllRead,
       toggleFavorite,
       resetToDefaults,
+      switchLocaleFeeds,
       getExportOpml,
+      applyRemoteSync,
+      addLocaleRecommendedFeeds,
+    }),
+    [
+      subscriptions,
+      articles,
+      readIds,
+      favoriteIds,
+      loading,
+      refreshing,
+      fetching,
+      fetchProgress,
+      initialFetchDone,
+      hydrated,
+      error,
+      lastUpdated,
+      offlineSyncing,
+      offlineCachedCount,
+      syncOfflineNow,
+      refresh,
+      addSubscription,
+      removeSubscription,
+      importSubscriptions,
+      markRead,
+      markAllRead,
+      toggleFavorite,
+      resetToDefaults,
+      switchLocaleFeeds,
+      getExportOpml,
+      applyRemoteSync,
+      addLocaleRecommendedFeeds,
     ],
   );
 

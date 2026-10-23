@@ -2,7 +2,8 @@
   "expo": {
     "name": "Appigeek",
     "slug": "appy-geek",
-    "version": "1.0.2",
+    "version": "1.0.24",
+    "scheme": "appigeek",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,15 +15,24 @@
     },
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": false,
       "bundleIdentifier": "com.appigeek.reader",
-      "buildNumber": "4",
+      "buildNumber": "52",
+      "appleTeamId": "2QKC854C2J",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "fr",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      },
       "config": {
         "usesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.appigeek.reader",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0c0e14"
@@ -34,20 +44,55 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/with-scene-lifecycle",
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": [
+              "fr",
+              "en",
+              "es",
+              "it",
+              "pt"
+            ],
+            "android": [
+              "fr",
+              "en",
+              "es",
+              "it",
+              "pt"
+            ]
+          }
+        }
+      ],
       "expo-web-browser",
       "expo-font",
+      "expo-apple-authentication",
+      [
+        "expo-notifications",
+        {
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
       [
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-5892183761290562~9981862026",
           "iosAppId": "ca-app-pub-5892183761290562~9981862026"
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-quick-actions",
+      "@bacons/apple-targets"
     ],
     "extra": {
       "eas": {
         "projectId": "7efd1549-548c-45a9-aede-4603bb6efab0"
-      }
+      },
+      "supabaseUrl": "https://ppnejmwvmkqnmrzcivqs.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwbmVqbXd2bWtxbm1yemNpdnFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNTkxOTUsImV4cCI6MjA5ODczNTE5NX0.TlenN0NZebxRq2Eazii6Haydf92wF61RF50hel5kHnY"
     },
     "owner": "dorian172"
   }

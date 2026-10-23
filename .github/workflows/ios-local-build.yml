@@ -1,0 +1,91 @@
+# Build iOS on GitHub Actions (Xcode 27.1) with eas build --local.
+# Does NOT consume EAS Free cloud build quota.
+name: iOS Local Build (Xcode 27.1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: 'Submit IPA to App Store Connect after build'
+        required: true
+        type: boolean
+        default: true
+
+concurrency:
+  group: ios-local-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: eas build --local
+    runs-on: xcode-27
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode 27.1
+        run: |
+          set -euo pipefail
+          ls /Applications | grep -i Xcode || true
+          if [ -d /Applications/Xcode_27.1.app ]; then
+            sudo xcode-select -s /Applications/Xcode_27.1.app
+          elif [ -d /Applications/Xcode_27.1_Release_Candidate.app ]; then
+            sudo xcode-select -s /Applications/Xcode_27.1_Release_Candidate.app
+          else
+            echo "Xcode 27.1 not found; using default"
+            xcode-select -p
+          fi
+          xcodebuild -version
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Expo / EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build iOS locally (no EAS cloud quota)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_LOCAL_BUILD_ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+          CI: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          eas build \
+            --platform ios \
+            --profile production \
+            --local \
+            --non-interactive \
+            --output artifacts/Appigeek.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Appigeek-ios-ipa
+          path: artifacts/Appigeek.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Submit to App Store Connect
+        if: ${{ inputs.submit }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          eas submit \
+            --platform ios \
+            --profile production \
+            --path artifacts/Appigeek.ipa \
+            --non-interactive \
+            --wait

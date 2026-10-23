@@ -9,6 +9,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 import { useFeeds } from '../context/FeedsContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import type { RootTabParamList } from '../navigation/RootTabs';
@@ -29,6 +30,7 @@ type Props = {
 export function SavedArticlesSection({ onOpenArticle }: Props) {
   const navigation = useNavigation<Nav>();
   const { palette, offlineCacheEnabled } = useAppSettings();
+  const { t } = useTranslation();
   const { offlineCachedCount } = useFeeds();
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [items, setItems] = useState<CachedArticleRecord[]>([]);
@@ -59,9 +61,9 @@ export function SavedArticlesSection({ onOpenArticle }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.titleRow}>
-        <Text style={styles.sectionTitle}>Articles sauvegardés</Text>
+        <Text style={styles.sectionTitle}>{t('saved.title')}</Text>
         <Pressable onPress={openAll} hitSlop={8} style={({ pressed }) => pressed && { opacity: 0.75 }}>
-          <Text style={styles.seeAll}>Voir tout</Text>
+          <Text style={styles.seeAll}>{t('saved.seeAll')}</Text>
         </Pressable>
       </View>
       {loading ? (
@@ -94,8 +96,7 @@ export function SavedArticlesSection({ onOpenArticle }: Props) {
             >
               <Ionicons name="chevron-forward" size={28} color={palette.accent} />
               <Text style={styles.moreText}>
-                +{offlineCachedCount - PREVIEW_LIMIT} autre
-                {offlineCachedCount - PREVIEW_LIMIT > 1 ? 's' : ''}
+                {t('saved.moreCount', { count: offlineCachedCount - PREVIEW_LIMIT })}
               </Text>
             </Pressable>
           ) : null}

@@ -1,13 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Constants from 'expo-constants';
 import * as Clipboard from 'expo-clipboard';
+import * as Speech from 'expo-speech';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
   InteractionManager,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -24,21 +27,57 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { ArticleFooterAd } from '../components/ArticleFooterAd';
+import { ArticleCommentsSection } from '../components/ArticleCommentsSection';
+import { ArticleSummaryCard } from '../components/ArticleSummaryCard';
+import { ArticleHtmlIframeRenderer } from '../components/ArticleHtmlIframeRenderer';
 import { ArticleHtmlImgRenderer } from '../components/ArticleHtmlImgRenderer';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useAuth } from '../context/AuthContext';
 import { useFeeds } from '../context/FeedsContext';
+import { localeDateTimeLocale, useTranslation } from '../i18n';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { proposeFeaturedArticle } from '../services/featuredProposalsService';
+import type { ParsedArticle } from '../types/article';
 import {
   pickRicherArticleHtml,
   rssBodyLikelyComplete,
+  strippedArticleTextLen,
 } from '../utils/articleHtmlMerge';
 import { fetchArticleHtmlFallback } from '../utils/fetchArticleHtmlFallback';
 import { isLikelyDirectImageAssetUrl } from '../utils/imageLinks';
+import { getCachedArticle } from '../utils/offlineCache';
+import { hapticLight } from '../utils/haptics';
 import { sanitizeArticleHtml } from '../utils/sanitizeArticleHtml';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ArticleReader'>;
+
+type ReaderNav = {
+  setOptions: NativeStackScreenProps<RootStackParamList, 'ArticleReader'>['navigation']['setOptions'];
+};
+
+export type ArticleReaderContentProps = {
+  articleId: string;
+  url: string;
+  title: string;
+  offlineHtml?: string;
+  navigation: ReaderNav;
+  embedded?: boolean;
+  onRequestClose?: () => void;
+  layoutWidth?: number;
+};
+
+function htmlToSpeechText(html: string, maxChars = 4000): string {
+  const plain = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (plain.length <= maxChars) return plain;
+  return `${plain.slice(0, maxChars).trim()}…`;
+}
 
 const WEBVIEW_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -73,42 +112,132 @@ function htmlToPlainPreview(html: string, maxChars: number): string {
 }
 
 export function ArticleReaderScreen({ route, navigation }: Props) {
-  const { articleId, url, title, offlineHtml: offlineHtmlParam } = route.params;
+  return (
+    <ArticleReaderContent
+      articleId={route.params.articleId}
+      url={route.params.url}
+      title={route.params.title}
+      offlineHtml={route.params.offlineHtml}
+      navigation={navigation}
+    />
+  );
+}
+
+export function ArticleReaderContent({
+  articleId,
+  url,
+  title,
+  offlineHtml: offlineHtmlParam,
+  navigation,
+  embedded = false,
+  onRequestClose,
+  layoutWidth,
+}: ArticleReaderContentProps) {
   const { articles, favoriteIds, toggleFavorite } = useFeeds();
-  const { readerDefaultView, readerFontMetrics, palette } = useAppSettings();
+  const { user, signInWithApple, appleAvailable } = useAuth();
+  const { readerDefaultView, readerFontMetrics, palette, appLocale, navigationTheme } =
+    useAppSettings();
+  const actionSheetUiStyle = navigationTheme.dark ? ('dark' as const) : ('light' as const);
+  const { t } = useTranslation();
   const styles = useMemo(
     () => createArticleReaderStyles(palette, readerFontMetrics),
     [palette, readerFontMetrics],
   );
-  const { width } = useWindowDimensions();
+  const windowSize = useWindowDimensions();
+  const width = layoutWidth && layoutWidth > 0 ? layoutWidth : windowSize.width;
   const insets = useSafeAreaInsets();
   const contentWidth = Math.max(0, width - spacing.md * 2);
+  const scrollRef = useRef<ScrollView>(null);
+  /** Hauteur clavier manuelle — évite l’espace vide sous les commentaires laissé par automaticallyAdjustKeyboardInsets. */
+  const [keyboardBottom, setKeyboardBottom] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardBottom(e.endCoordinates?.height ?? 0);
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => {
+      setKeyboardBottom(0);
+    });
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
+  const commentsSectionY = useRef(0);
+
+  const scrollBottomPad =
+    keyboardBottom > 0
+      ? keyboardBottom + spacing.sm
+      : spacing.sm + Math.max(insets.bottom, 0);
+
+  const scrollToComments = useCallback(() => {
+    const scroll = () => {
+      const y = Math.max(0, commentsSectionY.current - spacing.md);
+      scrollRef.current?.scrollTo({ y, animated: true });
+    };
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, Platform.OS === 'ios' ? 280 : 120);
+  }, []);
+
+  const readerScrollProps = {
+    ref: scrollRef,
+    keyboardShouldPersistTaps: 'handled' as const,
+    keyboardDismissMode: 'interactive' as const,
+    /** Empêche iOS d’ajouter un inset fantôme sous le contenu après fermeture du clavier. */
+    contentInsetAdjustmentBehavior: 'never' as const,
+  };
 
   const articleFromFeed = useMemo(
     () => articles.find((a) => a.id === articleId),
     [articles, articleId],
   );
-  const [cachedFallback, setCachedFallback] = useState<{
-    article: NonNullable<typeof articleFromFeed>;
+  /** HTML + meta lus depuis le cache disque (toujours, même si l’article est encore dans le flux). */
+  const [diskCache, setDiskCache] = useState<{
+    article: ParsedArticle;
     html: string;
   } | null>(null);
+  const [diskCacheReady, setDiskCacheReady] = useState(false);
 
-  const article = articleFromFeed ?? cachedFallback?.article ?? null;
+  /**
+   * Article ouvert depuis « Discussions » alors qu’il n’est plus dans le flux :
+   * on reconstruit un article minimal pour charger le contenu depuis la page
+   * et toujours afficher les commentaires associés.
+   */
+  const syntheticArticle = useMemo<ParsedArticle | null>(() => {
+    if (!url) return null;
+    return {
+      id: articleId,
+      title: title?.trim() || t('discussions.articleFallback'),
+      link: url,
+      publishedAt: Date.now(),
+      summary: '',
+      feedId: 'external',
+      feedTitle: '',
+    };
+  }, [articleId, t, title, url]);
+
+  const article = articleFromFeed ?? diskCache?.article ?? syntheticArticle;
   const isFavorite = favoriteIds.has(articleId);
 
   useEffect(() => {
-    if (articleFromFeed || offlineHtmlParam) return;
     let cancelled = false;
-    void import('../utils/offlineCache').then(({ getCachedArticle }) =>
-      getCachedArticle(articleId).then((rec) => {
-        if (cancelled || !rec) return;
-        setCachedFallback({ article: rec.article, html: rec.html });
-      }),
-    );
+    setDiskCache(null);
+    setDiskCacheReady(false);
+    void getCachedArticle(articleId)
+      .then((rec) => {
+        if (cancelled || !rec?.html?.trim()) return;
+        setDiskCache({ article: rec.article, html: rec.html });
+      })
+      .finally(() => {
+        if (!cancelled) setDiskCacheReady(true);
+      });
     return () => {
       cancelled = true;
     };
-  }, [articleId, articleFromFeed, offlineHtmlParam]);
+  }, [articleId]);
 
   const rssBody = article?.bodyHtml;
   const chapoPlain = article?.chapoPlain;
@@ -124,23 +253,56 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   const [webModalVisible, setWebModalVisible] = useState(false);
   const [showInlineWeb, setShowInlineWeb] = useState(false);
   const [inlineWebLoading, setInlineWebLoading] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
 
-  const displayHtml =
-    offlineHtmlParam?.trim() ||
-    cachedFallback?.html?.trim() ||
-    pickRicherArticleHtml(rssBody, fetchedHtml ?? undefined) ||
+  const cachedOfflineHtml =
+    offlineHtmlParam?.trim() || diskCache?.html?.trim() || '';
+  const usingOfflineCache = cachedOfflineHtml.length > 0;
+
+  const liveHtml =
+    pickRicherArticleHtml(rssBody, fetchedHtml ?? undefined, url) ||
     rssBody ||
     fetchedHtml ||
     '';
 
-  /** Toujours réappliquer scripts/styles/`cleanArticleHtml` — même si le flux ou le fetch ont déjà filtré. */
-  const articleHtmlForReader = useMemo(
-    () => (displayHtml.trim() ? sanitizeArticleHtml(displayHtml) : ''),
-    [displayHtml],
-  );
+  /** Cache hors ligne prioritaire s’il est au moins aussi riche que le RSS / le fetch. */
+  const displayHtml =
+    pickRicherArticleHtml(liveHtml || undefined, cachedOfflineHtml || undefined, url) ||
+    cachedOfflineHtml ||
+    liveHtml ||
+    '';
 
-  const hasFullArticle = hasUsableArticleHtml(articleHtmlForReader);
-  const fromPage = !!fetchedHtml && hasFullArticle;
+  /** Nettoyage HTML différé — évite de bloquer l’ouverture du lecteur (gros articles / Expo Go). */
+  const [articleHtmlForReader, setArticleHtmlForReader] = useState('');
+  const [sanitizeDone, setSanitizeDone] = useState(true);
+
+  useEffect(() => {
+    const raw = displayHtml.trim();
+    if (!raw) {
+      setArticleHtmlForReader('');
+      setSanitizeDone(true);
+      return;
+    }
+    let cancelled = false;
+    setSanitizeDone(false);
+    const task = InteractionManager.runAfterInteractions(() => {
+      setTimeout(() => {
+        if (cancelled) return;
+        setArticleHtmlForReader(sanitizeArticleHtml(raw, url));
+        setSanitizeDone(true);
+      }, 0);
+    });
+    return () => {
+      cancelled = true;
+      task.cancel();
+    };
+  }, [displayHtml, url]);
+
+  const hasFullArticle = sanitizeDone && hasUsableArticleHtml(articleHtmlForReader);
+  const fromOffline =
+    usingOfflineCache &&
+    strippedArticleTextLen(cachedOfflineHtml) >= strippedArticleTextLen(liveHtml || '') - 40;
+  const fromPage = !fromOffline && !!fetchedHtml && hasFullArticle;
 
   useEffect(() => {
     setFetchedHtml(null);
@@ -149,30 +311,46 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     setWebModalVisible(false);
     setShowInlineWeb(false);
     setInlineWebLoading(false);
+    setSpeaking(false);
+    Speech.stop();
   }, [articleId]);
 
   useEffect(() => {
     setShowFullArticle(readerDefaultView === 'full');
   }, [articleId, readerDefaultView]);
 
+  /** Hors ligne : ouvrir directement le corps complet dès que le cache est utilisable. */
+  useEffect(() => {
+    if (!diskCacheReady) return;
+    if (usingOfflineCache && hasUsableArticleHtml(cachedOfflineHtml)) {
+      setShowFullArticle(true);
+    }
+  }, [articleId, diskCacheReady, usingOfflineCache, cachedOfflineHtml]);
+
   useEffect(() => {
     if (!article || !url) return;
-    if (offlineHtmlParam?.trim() || cachedFallback?.html?.trim()) {
+    if (!diskCacheReady) return;
+
+    const offlineReady =
+      usingOfflineCache &&
+      (rssBodyLikelyComplete(cachedOfflineHtml, url) ||
+        strippedArticleTextLen(cachedOfflineHtml) >= 320 ||
+        hasUsableArticleHtml(cachedOfflineHtml));
+
+    if (offlineReady) {
       setFetchLoading(false);
       setFetchDone(true);
       return;
     }
-    if (rssBodyLikelyComplete(rssBody)) {
+    if (rssBodyLikelyComplete(rssBody, url)) {
       setFetchLoading(false);
       setFetchDone(true);
       return;
     }
+
     let cancelled = false;
     const hasQuickContent =
-      !!offlineHtmlParam?.trim() ||
-      !!cachedFallback?.html?.trim() ||
-      rssBodyLikelyComplete(rssBody) ||
-      hasUsableArticleHtml(rssBody);
+      offlineReady || rssBodyLikelyComplete(rssBody, url) || hasUsableArticleHtml(rssBody);
     if (!hasQuickContent) setFetchLoading(true);
 
     const task = InteractionManager.runAfterInteractions(() => {
@@ -198,7 +376,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
       cancelled = true;
       task.cancel();
     };
-  }, [article, url, rssBody, offlineHtmlParam, cachedFallback?.html]);
+  }, [article, url, rssBody, diskCacheReady, usingOfflineCache, cachedOfflineHtml]);
 
   const imgPlaceholderDimensions = useMemo(() => {
     const w = Math.max(1, contentWidth);
@@ -222,15 +400,18 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
       }
       const can = await Linking.canOpenURL(raw);
       if (can) await Linking.openURL(raw);
-      else Alert.alert('Lien non pris en charge');
+      else Alert.alert(t('reader.linkUnsupported'));
     } catch {
       try {
         await Linking.openURL(raw);
       } catch {
-        Alert.alert('Impossible d’ouvrir le lien', raw.length > 140 ? `${raw.slice(0, 140)}…` : raw);
+        Alert.alert(
+          t('reader.linkOpenFailed'),
+          raw.length > 140 ? `${raw.slice(0, 140)}…` : raw,
+        );
       }
     }
-  }, []);
+  }, [t]);
 
   const renderersProps = useMemo(
     () => ({
@@ -247,6 +428,8 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   const htmlRenderers = useMemo(
     () => ({
       img: ArticleHtmlImgRenderer,
+      iframe: ArticleHtmlIframeRenderer,
+      video: ArticleHtmlIframeRenderer,
     }),
     [],
   );
@@ -369,42 +552,154 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
     );
   }, [title, url]);
 
+  const openInSafari = useCallback(() => {
+    if (!url) return;
+    void Linking.openURL(url).catch(() => {
+      Alert.alert(t('common.error'), url);
+    });
+  }, [t, url]);
+
+  const toggleSpeech = useCallback(() => {
+    if (speaking) {
+      Speech.stop();
+      setSpeaking(false);
+      return;
+    }
+    const fromHtml = articleHtmlForReader ? htmlToSpeechText(articleHtmlForReader) : '';
+    const text = [title, chapoPlain, fromHtml].filter(Boolean).join('. ').trim();
+    if (!text) return;
+    setSpeaking(true);
+    Speech.speak(text, {
+      language: localeDateTimeLocale(appLocale),
+      onDone: () => setSpeaking(false),
+      onStopped: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+  }, [articleHtmlForReader, appLocale, chapoPlain, speaking, title]);
+
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+    };
+  }, []);
+
+  const proposeToFeatured = useCallback(() => {
+    if (!url?.trim()) {
+      Alert.alert(t('common.error'), t('reader.noArticleUrl'));
+      return;
+    }
+
+    const runPropose = async () => {
+      try {
+        await proposeFeaturedArticle({
+          articleUrl: url,
+          title: title?.trim() || t('discussions.articleFallback'),
+          feedTitle: article?.feedTitle || null,
+          imageUrl: article?.imageUrl ?? null,
+        });
+        Alert.alert(t('reader.featuredProposedTitle'), t('reader.featuredProposedMessage'));
+      } catch (e) {
+        Alert.alert(
+          t('common.error'),
+          e instanceof Error ? e.message : t('reader.featuredProposeFailed'),
+        );
+      }
+    };
+
+    if (!user) {
+      Alert.alert(t('settings.loginRequired'), t('reader.featuredProposeNeedSignIn'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('reader.featuredProposeSignIn'),
+          onPress: () => {
+            if (!appleAvailable) {
+              Alert.alert(t('settings.appleSignIn'), t('reader.appleSignInUnavailable'));
+              return;
+            }
+            void (async () => {
+              try {
+                await signInWithApple();
+                await runPropose();
+              } catch (e) {
+                Alert.alert(
+                  t('settings.appleSignIn'),
+                  e instanceof Error ? e.message : t('reader.signInFailed'),
+                );
+              }
+            })();
+          },
+        },
+      ]);
+      return;
+    }
+
+    void runPropose();
+  }, [appleAvailable, article?.feedTitle, article?.imageUrl, signInWithApple, t, title, url, user]);
+
   const openArticleMenu = useCallback(() => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options: [
-            'Annuler',
-            'Copier le lien',
-            'Ouvrir dans le navigateur externe',
-            'Partager…',
+            t('common.cancel'),
+            t('reader.jumpToDiscussion'),
+            t('reader.listen'),
+            t('reader.copyLink'),
+            t('reader.openSafari'),
+            t('reader.openBrowser'),
+            t('reader.share'),
+            t('reader.proposeFeatured'),
           ],
           cancelButtonIndex: 0,
-          userInterfaceStyle: 'dark',
+          userInterfaceStyle: actionSheetUiStyle,
         },
         (buttonIndex) => {
-          if (buttonIndex === 1) void copyLink();
-          if (buttonIndex === 2) openExternalBrowser();
-          if (buttonIndex === 3) void shareArticle();
+          if (buttonIndex === 1) scrollToComments();
+          if (buttonIndex === 2) toggleSpeech();
+          if (buttonIndex === 3) void copyLink();
+          if (buttonIndex === 4) openInSafari();
+          if (buttonIndex === 5) openExternalBrowser();
+          if (buttonIndex === 6) void shareArticle();
+          if (buttonIndex === 7) proposeToFeatured();
         },
       );
     } else {
-      Alert.alert('Article', undefined, [
-        { text: 'Copier le lien', onPress: () => void copyLink() },
-        { text: 'Navigateur externe', onPress: openExternalBrowser },
-        { text: 'Partager', onPress: () => void shareArticle() },
-        { text: 'Annuler', style: 'cancel' },
+      Alert.alert(title, undefined, [
+        { text: t('reader.jumpToDiscussion'), onPress: scrollToComments },
+        { text: t('reader.listen'), onPress: toggleSpeech },
+        { text: t('reader.copyLink'), onPress: () => void copyLink() },
+        { text: t('reader.openSafari'), onPress: openInSafari },
+        { text: t('reader.openBrowser'), onPress: openExternalBrowser },
+        { text: t('reader.share'), onPress: () => void shareArticle() },
+        { text: t('reader.proposeFeatured'), onPress: proposeToFeatured },
+        { text: t('common.cancel'), style: 'cancel' },
       ]);
     }
-  }, [copyLink, openExternalBrowser, shareArticle]);
+  }, [
+    actionSheetUiStyle,
+    copyLink,
+    openExternalBrowser,
+    openInSafari,
+    proposeToFeatured,
+    scrollToComments,
+    shareArticle,
+    t,
+    title,
+    toggleSpeech,
+  ]);
 
   const headerRight = useCallback(
     () => (
       <View style={styles.headerRightRow}>
         <Pressable
-          onPress={() => void toggleFavorite(articleId)}
+          onPress={() => {
+            hapticLight();
+            void toggleFavorite(articleId);
+          }}
           hitSlop={12}
-          accessibilityLabel={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          accessibilityLabel={
+            isFavorite ? t('reader.removeFavorite') : t('reader.addFavorite')
+          }
           style={styles.headerBtn}
         >
           <Ionicons
@@ -414,27 +709,20 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
           />
         </Pressable>
         <Pressable
-          onPress={() => setWebModalVisible(true)}
-          hitSlop={12}
-          accessibilityLabel="Page web dans l’app"
-          style={styles.headerBtn}
-        >
-          <Ionicons name="globe-outline" size={22} color={palette.accentMuted} />
-        </Pressable>
-        <Pressable
           onPress={openArticleMenu}
           hitSlop={12}
-          accessibilityLabel="Plus d’options"
+          accessibilityLabel={t('reader.more')}
           style={styles.headerBtn}
         >
           <Ionicons name="ellipsis-horizontal" size={22} color={palette.accentMuted} />
         </Pressable>
       </View>
     ),
-    [articleId, isFavorite, openArticleMenu, palette, styles, toggleFavorite],
+    [articleId, isFavorite, openArticleMenu, palette, styles, t, toggleFavorite],
   );
 
   useEffect(() => {
+    if (embedded) return;
     navigation.setOptions({
       title: title.length > 34 ? `${title.slice(0, 34)}…` : title,
       headerShadowVisible: false,
@@ -443,7 +731,24 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
       headerTitleStyle: { ...typography.body, fontWeight: '600', color: palette.text },
       headerRight,
     });
-  }, [navigation, title, headerRight, palette]);
+  }, [embedded, navigation, title, headerRight, palette]);
+
+  const embeddedHeader = embedded ? (
+    <View style={styles.embeddedHeader}>
+      <Pressable
+        onPress={onRequestClose}
+        hitSlop={12}
+        accessibilityLabel={t('common.cancel')}
+        style={styles.headerBtn}
+      >
+        <Ionicons name="close" size={22} color={palette.text} />
+      </Pressable>
+      <Text style={styles.embeddedTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      {headerRight()}
+    </View>
+  ) : null;
 
   const webModal = (
     <Modal
@@ -458,7 +763,7 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             onPress={() => setWebModalVisible(false)}
             hitSlop={12}
             style={styles.modalCloseBtn}
-            accessibilityLabel="Fermer"
+            accessibilityLabel={t('common.close')}
           >
             <Ionicons name="close" size={28} color={palette.text} />
           </Pressable>
@@ -475,21 +780,34 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   if (!article) {
     return (
       <View style={styles.flex}>
+        {embeddedHeader}
         {webModal}
         <View style={styles.banner}>
           <Ionicons name="alert-circle-outline" size={18} color={palette.textMuted} />
-          <Text style={styles.bannerText}>
-            Article introuvable (liste actualisée). Ouverture de la page en ligne.
-          </Text>
+          <Text style={styles.bannerText}>{t('reader.missingArticle')}</Text>
         </View>
-        <WebView source={{ uri: url }} style={styles.webview} userAgent={WEBVIEW_UA} />
+        <View style={[styles.scrollInner, { paddingTop: spacing.lg }]}>
+          <Pressable
+            onPress={openExternalBrowser}
+            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.88 }]}
+          >
+            <Ionicons name="globe-outline" size={22} color={palette.text} />
+            <Text style={styles.primaryBtnText}>{t('reader.openExternalBrowser')}</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
   const chapoOk = hasUsableChapo(chapoPlain);
+  const preparingArticle = !!displayHtml.trim() && !sanitizeDone;
   const webOnlyFallback =
-    fetchDone && !fetchLoading && !chapoOk && !hasFullArticle;
+    fetchDone &&
+    !fetchLoading &&
+    sanitizeDone &&
+    !chapoOk &&
+    !hasFullArticle &&
+    !displayHtml.trim();
 
   const previewBody =
     chapoOk && chapoPlain
@@ -502,42 +820,68 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   if (hasFullArticle && articleHtmlForReader && !showFullArticle) {
     return (
       <View style={styles.flex}>
+        {embeddedHeader}
         {webModal}
         <ScrollView
+          {...readerScrollProps}
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollInner,
-            { paddingBottom: insets.bottom + spacing.lg },
+            { paddingBottom: scrollBottomPad },
           ]}
           showsVerticalScrollIndicator
         >
           <View style={styles.sourceBanner}>
             <Ionicons
-              name={fromPage ? 'cloud-download-outline' : 'newspaper-outline'}
+              name={
+                fromOffline
+                  ? 'cloud-offline-outline'
+                  : fromPage
+                    ? 'cloud-download-outline'
+                    : 'newspaper-outline'
+              }
               size={16}
-              color={fromPage ? palette.accentMuted : palette.success}
+              color={fromOffline || fromPage ? palette.accentMuted : palette.success}
             />
             <Text style={styles.sourceBannerText}>
-              {fromPage
-                ? 'Texte complet récupéré depuis le site — affichez-le ci-dessous.'
-                : 'Article complet fourni par le flux RSS — affichez-le ci-dessous.'}
+              {fromOffline
+                ? t('reader.sourceOfflineSaved')
+                : fromPage
+                  ? t('reader.sourceFromPagePreview')
+                  : t('reader.sourceFromRssPreview')}
             </Text>
           </View>
           {feedTitle ? <Text style={styles.feedTag}>{feedTitle}</Text> : null}
+          <ArticleSummaryCard
+            title={title}
+            articleUrl={url}
+            sourceText={previewBody || chapoPlain || ''}
+          />
           {previewBody ? (
             <Text style={styles.chapoBody} selectable>
               {previewBody}
             </Text>
           ) : (
-            <Text style={styles.fetchHint}>Aperçu indisponible — ouvrez l’article entier.</Text>
+            <Text style={styles.fetchHint}>{t('reader.previewUnavailable')}</Text>
           )}
           <Pressable
             onPress={() => setShowFullArticle(true)}
             style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.88 }]}
           >
             <Ionicons name="document-text-outline" size={22} color={palette.text} />
-            <Text style={styles.primaryBtnText}>Afficher l’article entier</Text>
+            <Text style={styles.primaryBtnText}>{t('reader.showFullArticle')}</Text>
           </Pressable>
+          <View
+            onLayout={(e) => {
+              commentsSectionY.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <ArticleCommentsSection
+              articleUrl={url}
+              articleTitle={title}
+              onComposeFocus={scrollToComments}
+            />
+          </View>
           <ArticleFooterAd key={articleId} reloadKey={articleId} />
         </ScrollView>
       </View>
@@ -547,12 +891,14 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   if (hasFullArticle && articleHtmlForReader && showFullArticle) {
     return (
       <View style={styles.flex}>
+        {embeddedHeader}
         {webModal}
         <ScrollView
+          {...readerScrollProps}
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollInner,
-            { paddingBottom: insets.bottom + spacing.lg },
+            { paddingBottom: scrollBottomPad },
           ]}
           showsVerticalScrollIndicator
         >
@@ -561,21 +907,34 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             style={({ pressed }) => [styles.backPreviewBtn, pressed && { opacity: 0.85 }]}
           >
             <Ionicons name="chevron-back" size={22} color={palette.accentMuted} />
-            <Text style={styles.backPreviewText}>Revenir à l’aperçu</Text>
+            <Text style={styles.backPreviewText}>{t('reader.backToPreview')}</Text>
           </Pressable>
           <View style={styles.sourceBanner}>
             <Ionicons
-              name={fromPage ? 'cloud-download-outline' : 'newspaper-outline'}
+              name={
+                fromOffline
+                  ? 'cloud-offline-outline'
+                  : fromPage
+                    ? 'cloud-download-outline'
+                    : 'newspaper-outline'
+              }
               size={16}
-              color={fromPage ? palette.accentMuted : palette.success}
+              color={fromOffline || fromPage ? palette.accentMuted : palette.success}
             />
             <Text style={styles.sourceBannerText}>
-              {fromPage
-                ? 'Texte récupéré depuis la page web (article complet)'
-                : 'Article complet fourni par le flux RSS'}
+              {fromOffline
+                ? t('reader.sourceOfflineReading')
+                : fromPage
+                  ? t('reader.sourceFromPageFull')
+                  : t('reader.sourceFromRssFull')}
             </Text>
           </View>
           {feedTitle ? <Text style={styles.feedTag}>{feedTitle}</Text> : null}
+          <ArticleSummaryCard
+            title={title}
+            articleUrl={url}
+            sourceText={articleHtmlForReader || chapoPlain || ''}
+          />
           <RenderHtml
             contentWidth={contentWidth}
             source={renderHtmlSource}
@@ -586,6 +945,17 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
             renderersProps={renderersProps}
             defaultTextProps={RENDER_HTML_DEFAULT_TEXT_PROPS}
           />
+          <View
+            onLayout={(e) => {
+              commentsSectionY.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <ArticleCommentsSection
+              articleUrl={url}
+              articleTitle={title}
+              onComposeFocus={scrollToComments}
+            />
+          </View>
           <ArticleFooterAd key={articleId} reloadKey={articleId} />
         </ScrollView>
       </View>
@@ -595,26 +965,70 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
   if (webOnlyFallback) {
     return (
       <View style={styles.flex}>
+        {embeddedHeader}
         {webModal}
-        <View style={styles.banner}>
-          <Ionicons name="globe-outline" size={18} color={palette.textMuted} />
-          <Text style={styles.bannerText}>
-            Aucun extrait dans le flux et extraction depuis la page impossible — affichage du site.
-          </Text>
-        </View>
-        <WebView source={{ uri: url }} style={styles.webview} userAgent={WEBVIEW_UA} />
+        <ScrollView
+          {...readerScrollProps}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollInner,
+            { paddingBottom: scrollBottomPad },
+          ]}
+          showsVerticalScrollIndicator
+        >
+          <View style={styles.sourceBanner}>
+            <Ionicons name="globe-outline" size={16} color={palette.textMuted} />
+            <Text style={styles.sourceBannerText}>{t('reader.extractFailed')}</Text>
+          </View>
+          {feedTitle ? <Text style={styles.feedTag}>{feedTitle}</Text> : null}
+          <ArticleSummaryCard
+            title={title}
+            articleUrl={url}
+            sourceText={chapoPlain || ''}
+          />
+          <Pressable
+            onPress={openExternalBrowser}
+            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.88 }]}
+          >
+            <Ionicons name="open-outline" size={22} color={palette.text} />
+            <Text style={styles.primaryBtnText}>{t('reader.openArticlePage')}</Text>
+          </Pressable>
+          {Constants.appOwnership !== 'expo' ? (
+            <Pressable
+              onPress={() => setWebModalVisible(true)}
+              style={({ pressed }) => [styles.toggleBtn, pressed && { opacity: 0.88 }]}
+            >
+              <Ionicons name="layers-outline" size={20} color={palette.text} />
+              <Text style={styles.toggleBtnText}>{t('reader.showPageInApp')}</Text>
+            </Pressable>
+          ) : null}
+          <View
+            onLayout={(e) => {
+              commentsSectionY.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <ArticleCommentsSection
+              articleUrl={url}
+              articleTitle={title}
+              onComposeFocus={scrollToComments}
+            />
+          </View>
+          <ArticleFooterAd key={articleId} reloadKey={articleId} />
+        </ScrollView>
       </View>
     );
   }
 
   return (
     <View style={styles.flexColumn}>
-      {webModal}
+      {embeddedHeader}
+        {webModal}
       <ScrollView
+        {...readerScrollProps}
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scrollInner,
-          { paddingBottom: spacing.lg + insets.bottom },
+          { paddingBottom: scrollBottomPad },
         ]}
         showsVerticalScrollIndicator
       >
@@ -622,55 +1036,76 @@ export function ArticleReaderScreen({ route, navigation }: Props) {
           <Ionicons name="hourglass-outline" size={16} color={palette.accentMuted} />
           <Text style={styles.sourceBannerText}>
             {fetchLoading
-              ? 'Récupération du texte complet sur le site…'
-              : 'Le flux ne contient qu’un extrait — lecture complète chargée ou en attente'}
+              ? t('reader.fetchingFull')
+              : preparingArticle
+                ? t('reader.preparing')
+                : t('reader.excerptOnly')}
           </Text>
         </View>
         {feedTitle ? <Text style={styles.feedTag}>{feedTitle}</Text> : null}
-        {fetchLoading ? (
+        <ArticleSummaryCard
+          title={title}
+          articleUrl={url}
+          sourceText={chapoPlain || articleHtmlForReader || ''}
+        />
+        {fetchLoading || preparingArticle ? (
           <View style={styles.fetchRow}>
             <ActivityIndicator size="small" color={palette.accent} />
-            <Text style={styles.fetchHint}>Analyse de la page pour extraire l’article…</Text>
+            <Text style={styles.fetchHint}>
+              {fetchLoading ? t('reader.analyzingPage') : t('reader.formatting')}
+            </Text>
           </View>
         ) : null}
         {chapoOk && chapoPlain ? (
           <Text style={styles.chapoBody} selectable>
             {chapoPlain.trim()}
           </Text>
-        ) : !fetchLoading ? (
-          <Text style={styles.fetchHint}>
-            Utilisez le globe en haut à droite pour ouvrir la page dans l’app, ou le menu ••• pour
-            plus d’options.
-          </Text>
+        ) : !fetchLoading && !preparingArticle ? (
+          <Text style={styles.fetchHint}>{t('reader.hintUseMenu')}</Text>
         ) : null}
-        <Pressable
-          onPress={() => {
-            setShowInlineWeb((prev) => {
-              const next = !prev;
-              if (next) setInlineWebLoading(true);
-              else setInlineWebLoading(false);
-              return next;
-            });
+        {Constants.appOwnership !== 'expo' ? (
+          <Pressable
+            onPress={() => {
+              setShowInlineWeb((prev) => {
+                const next = !prev;
+                if (next) setInlineWebLoading(true);
+                else setInlineWebLoading(false);
+                return next;
+              });
+            }}
+            style={({ pressed }) => [styles.toggleBtn, pressed && { opacity: 0.88 }]}
+          >
+            <Ionicons
+              name={showInlineWeb ? 'chevron-up' : 'layers-outline'}
+              size={20}
+              color={palette.text}
+            />
+            <Text style={styles.toggleBtnText}>
+              {showInlineWeb
+                ? t('reader.toggleWebUnderExcerptHide')
+                : t('reader.toggleWebUnderExcerptShow')}
+            </Text>
+          </Pressable>
+        ) : null}
+        <View
+          onLayout={(e) => {
+            commentsSectionY.current = e.nativeEvent.layout.y;
           }}
-          style={({ pressed }) => [styles.toggleBtn, pressed && { opacity: 0.88 }]}
         >
-          <Ionicons
-            name={showInlineWeb ? 'chevron-up' : 'layers-outline'}
-            size={20}
-            color={palette.text}
+          <ArticleCommentsSection
+            articleUrl={url}
+            articleTitle={title}
+            onComposeFocus={scrollToComments}
           />
-          <Text style={styles.toggleBtnText}>
-            {showInlineWeb ? 'Masquer la page sous l’extrait' : 'Afficher la page sous l’extrait'}
-          </Text>
-        </Pressable>
+        </View>
         <ArticleFooterAd key={articleId} reloadKey={articleId} />
       </ScrollView>
-      {showInlineWeb ? (
+      {Constants.appOwnership !== 'expo' && showInlineWeb ? (
         <View style={styles.webSplit}>
           {inlineWebLoading ? (
             <View style={styles.wvLoadingSplit}>
               <ActivityIndicator size="large" color={palette.accent} />
-              <Text style={styles.loadingText}>Chargement…</Text>
+              <Text style={styles.loadingText}>{t('common.loading')}</Text>
             </View>
           ) : null}
           <WebView
@@ -700,7 +1135,22 @@ function createArticleReaderStyles(
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: spacing.xs,
-    gap: spacing.xs,
+    gap: 2,
+  },
+  embeddedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.border,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    backgroundColor: palette.bg,
+  },
+  embeddedTitle: {
+    ...typography.subtitle,
+    color: palette.text,
+    flex: 1,
+    marginHorizontal: spacing.xs,
   },
   modalRoot: { flex: 1, backgroundColor: palette.bg },
   modalBar: {
@@ -832,6 +1282,12 @@ function createArticleReaderStyles(
   bannerText: { ...typography.caption, color: palette.textMuted, flex: 1 },
   webview: { flex: 1, backgroundColor: palette.bg },
   loadingText: { ...typography.body, color: palette.textMuted, marginTop: spacing.sm },
-  headerBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  headerBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
 });
 }

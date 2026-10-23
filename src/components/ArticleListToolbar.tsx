@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 import type { ArticleListFilter } from '../utils/articleFilters';
 
 export type FeedSourceOption = { id: string; title: string };
@@ -22,10 +23,10 @@ type Props = {
   searchPlaceholder?: string;
 };
 
-const FILTERS: { id: ArticleListFilter; label: string }[] = [
-  { id: 'all', label: 'Tous' },
-  { id: 'unread', label: 'Non lus' },
-  { id: 'favorites', label: 'Favoris' },
+const FILTER_KEYS: { id: ArticleListFilter; key: 'toolbar.all' | 'toolbar.unread' | 'toolbar.favorites' }[] = [
+  { id: 'all', key: 'toolbar.all' },
+  { id: 'unread', key: 'toolbar.unread' },
+  { id: 'favorites', key: 'toolbar.favorites' },
 ];
 
 export function ArticleListToolbar({
@@ -37,10 +38,12 @@ export function ArticleListToolbar({
   feedSources,
   selectedFeedId = null,
   onFeedIdChange,
-  searchPlaceholder = 'Rechercher un article…',
+  searchPlaceholder,
 }: Props) {
   const { palette } = useAppSettings();
+  const { t } = useTranslation();
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const placeholder = searchPlaceholder ?? t('home.searchArticles');
 
   return (
     <View style={styles.wrap}>
@@ -49,7 +52,7 @@ export function ArticleListToolbar({
         <TextInput
           value={searchQuery}
           onChangeText={onSearchChange}
-          placeholder={searchPlaceholder}
+          placeholder={placeholder}
           placeholderTextColor={palette.textMuted}
           style={styles.searchInput}
           autoCapitalize="none"
@@ -77,7 +80,7 @@ export function ArticleListToolbar({
                 selectedFeedId === null && styles.sourceChipTextActive,
               ]}
             >
-              Toutes les sources
+              {t('toolbar.allSources')}
             </Text>
           </Pressable>
           {feedSources.map((s) => {
@@ -104,7 +107,7 @@ export function ArticleListToolbar({
         </ScrollView>
       ) : null}
       <View style={styles.chipsRow}>
-        {FILTERS.map((f) => {
+        {FILTER_KEYS.map((f) => {
           const active = filter === f.id;
           return (
             <Pressable
@@ -116,17 +119,19 @@ export function ArticleListToolbar({
                 pressed && { opacity: 0.9 },
               ]}
             >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{t(f.key)}</Text>
             </Pressable>
           );
         })}
         {onMarkAllRead ? (
           <Pressable
             onPress={onMarkAllRead}
+            accessibilityRole="button"
+            accessibilityLabel={t('toolbar.markAllRead')}
             style={({ pressed }) => [styles.markAllBtn, pressed && { opacity: 0.85 }]}
           >
             <Ionicons name="checkmark-done-outline" size={16} color={palette.accentMuted} />
-            <Text style={styles.markAllText}>Tout lu</Text>
+            <Text style={styles.markAllText}>{t('toolbar.markAllRead')}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -166,7 +171,9 @@ function createStyles(palette: AppPalette) {
     },
     chip: {
       paddingHorizontal: spacing.md,
-      paddingVertical: spacing.xs,
+      paddingVertical: 10,
+      minHeight: 44,
+      justifyContent: 'center',
       borderRadius: 20,
       borderWidth: 1,
       borderColor: palette.border,
@@ -183,6 +190,7 @@ function createStyles(palette: AppPalette) {
       alignItems: 'center',
       gap: 4,
       marginLeft: 'auto',
+      minHeight: 44,
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
     },
@@ -190,11 +198,14 @@ function createStyles(palette: AppPalette) {
     sourceScroll: {
       gap: spacing.xs,
       paddingRight: spacing.md,
+      alignItems: 'center',
     },
     sourceChip: {
       maxWidth: 200,
+      minHeight: 44,
+      justifyContent: 'center',
       paddingHorizontal: spacing.md,
-      paddingVertical: spacing.xs,
+      paddingVertical: 10,
       borderRadius: 20,
       borderWidth: 1,
       borderColor: palette.border,

@@ -124,27 +124,28 @@ const forest: AppPalette = {
   themeCardTitle: '#ecfdf5',
 };
 
+/** Labels/hints are English fallbacks; UI must use `getVisualThemeLabel` / `t('visualTheme.*')`. */
 export const VISUAL_THEME_OPTIONS: VisualThemeOption[] = [
   {
     id: 'dark_default',
-    label: 'Minuit (par défaut)',
-    hint: 'Violet sur fond sombre — thème actuel de l’app.',
+    label: 'Midnight (default)',
+    hint: 'Purple on dark — app default.',
     palette: darkDefault,
     statusBarStyle: 'light',
     navigationDark: true,
   },
   {
     id: 'light',
-    label: 'Jour',
-    hint: 'Interface claire, bon contraste.',
+    label: 'Day',
+    hint: 'Light interface, strong contrast.',
     palette: light,
     statusBarStyle: 'dark',
     navigationDark: false,
   },
   {
     id: 'ocean',
-    label: 'Océan',
-    hint: 'Bleus profonds et cyan.',
+    label: 'Ocean',
+    hint: 'Deep blues and cyan.',
     palette: ocean,
     statusBarStyle: 'light',
     navigationDark: true,
@@ -152,15 +153,15 @@ export const VISUAL_THEME_OPTIONS: VisualThemeOption[] = [
   {
     id: 'sunset',
     label: 'Sunset',
-    hint: 'Rosé et pourpre.',
+    hint: 'Rose and purple.',
     palette: sunset,
     statusBarStyle: 'light',
     navigationDark: true,
   },
   {
     id: 'forest',
-    label: 'Forêt',
-    hint: 'Verts et tons nature.',
+    label: 'Forest',
+    hint: 'Greens and nature tones.',
     palette: forest,
     statusBarStyle: 'light',
     navigationDark: true,

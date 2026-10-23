@@ -61,7 +61,7 @@ async function ensureCacheDir(): Promise<void> {
 function htmlFromFeedFallback(article: ParsedArticle): string {
   const rss = article.bodyHtml;
   if (rss?.trim()) {
-    return sanitizeArticleHtml(rss);
+    return sanitizeArticleHtml(rss, article.link);
   }
   const plain = (article.chapoPlain || article.summary || article.title || '').trim();
   if (plain) {
@@ -69,13 +69,16 @@ function htmlFromFeedFallback(article: ParsedArticle): string {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-    return sanitizeArticleHtml(`<p>${escaped}</p>`);
+    return sanitizeArticleHtml(`<p>${escaped}</p>`, article.link);
   }
   return '';
 }
 
 /** Télécharge la page source puis garde le HTML le plus riche (comme « Afficher l’article entier »). */
-async function resolveFullArticleHtml(article: ParsedArticle): Promise<string> {
+async function resolveFullArticleHtml(
+  article: ParsedArticle,
+  previousHtml?: string,
+): Promise<string> {
   const rss = article.bodyHtml;
   let fetched: string | null = null;
 
@@ -87,10 +90,15 @@ async function resolveFullArticleHtml(article: ParsedArticle): Promise<string> {
     }
   }
 
+  const fromNetwork =
+    pickRicherArticleHtml(rss, fetched ?? undefined, article.link) ?? rss ?? fetched ?? '';
   const merged =
-    pickRicherArticleHtml(rss, fetched ?? undefined) ?? rss ?? fetched ?? '';
+    pickRicherArticleHtml(previousHtml, fromNetwork || undefined, article.link) ??
+    fromNetwork ??
+    previousHtml ??
+    '';
   if (merged.trim()) {
-    return sanitizeArticleHtml(merged);
+    return sanitizeArticleHtml(merged, article.link);
   }
   return htmlFromFeedFallback(article);
 }
@@ -140,9 +148,19 @@ export async function syncOfflineArticles(
   const sorted = [...articles].sort((a, b) => b.publishedAt - a.publishedAt).slice(0, limit);
   const now = Date.now();
 
+  const previousById = new Map<string, string>();
+  try {
+    const previous = await listCachedArticles();
+    for (const rec of previous) {
+      if (rec.html?.trim()) previousById.set(rec.article.id, rec.html);
+    }
+  } catch {
+    /* ignore */
+  }
+
   const outcomes = await runPool(sorted, FETCH_CONCURRENCY, async (article) => {
     try {
-      const html = await resolveFullArticleHtml(article);
+      const html = await resolveFullArticleHtml(article, previousById.get(article.id));
       if (!html.trim()) {
         return { entry: null as IndexEntry | null, failed: true };
       }

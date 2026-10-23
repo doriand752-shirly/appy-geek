@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AppPalette } from '../constants/theme';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 
 type Props = {
   selectedCount: number;
@@ -25,6 +26,7 @@ export function ArticleSelectionBar({
   useTopSafeArea = true,
 }: Props) {
   const { palette } = useAppSettings();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(palette), [palette]);
 
@@ -33,19 +35,22 @@ export function ArticleSelectionBar({
       <Pressable
         onPress={onClose}
         hitSlop={12}
-        accessibilityLabel="Quitter le mode sélection"
+        accessibilityRole="button"
+        accessibilityLabel={t('selection.exit')}
         style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.8 }]}
       >
         <Ionicons name="close" size={24} color={palette.text} />
       </Pressable>
       <Text style={styles.label}>
         {selectedCount === 0
-          ? 'Sélectionnez des articles'
-          : `${selectedCount} sélectionné${selectedCount > 1 ? 's' : ''}`}
+          ? t('selection.hint')
+          : t('selection.selectedCount', { count: selectedCount })}
       </Text>
       <Pressable
         onPress={onMarkRead}
         disabled={selectedCount === 0}
+        accessibilityRole="button"
+        accessibilityLabel={t('selection.markRead')}
         style={({ pressed }) => [
           styles.actionBtn,
           selectedCount === 0 && styles.actionBtnDisabled,
@@ -53,7 +58,7 @@ export function ArticleSelectionBar({
         ]}
       >
         <Ionicons name="checkmark-done-outline" size={18} color={palette.onAccent} />
-        <Text style={styles.actionText}>Lu</Text>
+        <Text style={styles.actionText}>{t('selection.markRead')}</Text>
       </Pressable>
     </View>
   );
@@ -112,7 +117,10 @@ function createStyles(palette: AppPalette) {
       borderColor: palette.accent,
     },
     closeBtn: {
-      padding: spacing.xs,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     label: {
       ...typography.body,
@@ -124,6 +132,7 @@ function createStyles(palette: AppPalette) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
+      minHeight: 44,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs,
       borderRadius: 8,

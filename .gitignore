@@ -31,6 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 credentials.json
 eas-build-*.log
@@ -44,3 +45,5 @@ eas-build-*.log
 
 # Dépôt GitHub Pages utilisateur séparé (AdMob app-ads à la racine github.io) — voir dossier /doriand752-shirly.github.io/
 /doriand752-shirly.github.io/
+
+supabase/.temp/

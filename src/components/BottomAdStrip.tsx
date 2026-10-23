@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-na
 import { APP_AD_CONFIG } from '../constants/appAds';
 import { spacing, typography } from '../constants/theme';
 import { useAppSettings } from '../context/AppSettingsContext';
+import { useTranslation } from '../i18n';
 import { getMobileAdsReady } from '../utils/mobileAdsInit';
 import { shouldUseGoogleTestAdIds } from '../utils/admobTestIds';
 import { loadGoogleMobileAds } from '../utils/googleMobileAdsModule';
@@ -15,6 +16,7 @@ import { loadGoogleMobileAds } from '../utils/googleMobileAdsModule';
  */
 export function BottomAdStrip() {
   const { palette } = useAppSettings();
+  const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const [slotEligible, setSlotEligible] = useState(false);
   const [adLoaded, setAdLoaded] = useState(false);
@@ -96,7 +98,7 @@ export function BottomAdStrip() {
           <Pressable
             onPress={() => setSlotEligible(false)}
             hitSlop={10}
-            accessibilityLabel="Masquer cette annonce"
+            accessibilityLabel={t('ad.hideA11y')}
             style={styles.closeBtn}
           >
             <Ionicons name="close" size={22} color={palette.textMuted} />
@@ -114,17 +116,17 @@ export function BottomAdStrip() {
         onPress={openFallbackAd}
         style={({ pressed }) => [styles.touch, pressed && { opacity: 0.92 }]}
         accessibilityRole="link"
-        accessibilityLabel={`Publicité : ${APP_AD_CONFIG.fallbackTitle}`}
+        accessibilityLabel={t('ad.fallbackA11y', { title: t('ad.fallbackTitle') })}
       >
-        <Text style={[styles.badge, { color: palette.textMuted }]}>Publicité</Text>
+        <Text style={[styles.badge, { color: palette.textMuted }]}>{t('ad.label')}</Text>
         <Text style={[styles.title, { color: palette.text }]} numberOfLines={1}>
-          {APP_AD_CONFIG.fallbackTitle}
+          {t('ad.fallbackTitle')}
         </Text>
       </Pressable>
       <Pressable
         onPress={() => setSlotEligible(false)}
         hitSlop={10}
-        accessibilityLabel="Masquer cette annonce"
+        accessibilityLabel={t('ad.hideA11y')}
         style={styles.closeBtn}
       >
         <Ionicons name="close" size={22} color={palette.textMuted} />
