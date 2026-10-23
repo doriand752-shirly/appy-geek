@@ -142,7 +142,7 @@ export function ThemeArticlesScreen({ route, navigation }: Props) {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={split ? ['bottom', 'left', 'right'] : ['bottom']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
       {!themeBuiltin && !themeCustom ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>{t('themeArticles.unknown')}</Text>

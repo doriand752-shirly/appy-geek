@@ -70,7 +70,7 @@ export function DiscussionsScreen() {
   }, [refreshStats]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>{t('discussions.title')}</Text>
         <Text style={styles.subtitle}>{t('discussions.subtitle')}</Text>

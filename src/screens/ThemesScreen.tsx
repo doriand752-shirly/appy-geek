@@ -76,7 +76,7 @@ export function ThemesScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={styles.title}>{t('tabs.themes')}</Text>

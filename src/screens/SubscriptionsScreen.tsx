@@ -148,7 +148,7 @@ export function SubscriptionsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>{t('subscriptions.title')}</Text>
         <Text style={styles.subtitle}>{t('subscriptions.subtitle')}</Text>

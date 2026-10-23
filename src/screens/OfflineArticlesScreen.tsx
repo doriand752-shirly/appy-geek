@@ -160,7 +160,7 @@ export function OfflineArticlesScreen({ navigation }: Props) {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={split ? ['bottom', 'left', 'right'] : ['bottom']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
       <View style={[styles.screenBody, split && styles.splitRow]}>
         <View style={split ? styles.splitList : styles.flex}>{listPane}</View>
         {split ? (

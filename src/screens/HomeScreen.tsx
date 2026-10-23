@@ -356,7 +356,11 @@ export function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={split ? ['top', 'left', 'right'] : ['top']}>
+    <SafeAreaView
+      style={styles.safe}
+      // iOS native tabs / Duo vertical chrome: respect left+right insets (asymmetric).
+      edges={['top', 'left', 'right']}
+    >
       <View style={[styles.screenBody, split && styles.splitRow]}>
         <View style={split ? styles.splitList : styles.flex}>
           <FlatList
