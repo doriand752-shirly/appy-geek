@@ -45,6 +45,15 @@
     },
     "plugins": [
       "./plugins/with-scene-lifecycle",
+      "./plugins/with-ios-deployment-target",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
       [
         "expo-localization",
         {
