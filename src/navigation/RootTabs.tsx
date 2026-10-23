@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   createBottomTabNavigator,
   BottomTabBar,
+  type BottomTabBarProps,
 } from '@react-navigation/bottom-tabs';
-import { createNativeBottomTabNavigator } from '@react-navigation/bottom-tabs/unstable';
-import { Platform, View } from 'react-native';
+import { useMemo } from 'react';
+import { useWindowDimensions, View } from 'react-native';
 
 import { BottomAdStrip } from '../components/BottomAdStrip';
 import { useAppSettings } from '../context/AppSettingsContext';
@@ -14,6 +15,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SubscriptionsScreen } from '../screens/SubscriptionsScreen';
 import { ThemesScreen } from '../screens/ThemesScreen';
+import { shouldExpectVerticalSystemBars } from '../utils/duoChrome';
 
 export type RootTabParamList = {
   Accueil: undefined;
@@ -23,122 +25,65 @@ export type RootTabParamList = {
   Paramètres: undefined;
 };
 
+const Tab = createBottomTabNavigator<RootTabParamList>();
+
 /**
- * iOS: native UITabBarController so iPhone Duo (iOS 27.1 SDK) can move
- * the tab bar into the vertical side chrome with system toolbars.
- * Android / others: JS bottom tabs (unchanged behavior + ad strip).
+ * iPhone Duo (SDK 27.1): system chrome expects tabs on the trailing edge.
+ * Expo 54 cannot use createNativeBottomTabNavigator (needs screens 4.30 / SDK 57),
+ * so we use JS tabs with tabBarPosition left/right — same layout Apple documents.
  */
-const useNativeIosTabs = Platform.OS === 'ios';
-
-const NativeTab = createNativeBottomTabNavigator<RootTabParamList>();
-const JsTab = createBottomTabNavigator<RootTabParamList>();
-
-function NativeIosTabs() {
-  const { palette } = useAppSettings();
-  const { t } = useTranslation();
-
+function DuoAwareTabBar(props: BottomTabBarProps) {
+  const { width, height } = useWindowDimensions();
+  const vertical = shouldExpectVerticalSystemBars(width, height);
+  if (vertical) {
+    return <BottomTabBar {...props} />;
+  }
   return (
-    <NativeTab.Navigator
-      screenOptions={{
-        headerShown: false,
-        lazy: true,
-        tabBarActiveTintColor: palette.accent,
-        tabBarStyle: {
-          backgroundColor: palette.surface,
-        },
-        // Banner in system accessory (iOS 26+); Duo moves bars to the side automatically.
-        bottomAccessory: () => <BottomAdStrip />,
-      }}
-    >
-      <NativeTab.Screen
-        name="Accueil"
-        component={HomeScreen}
-        options={{
-          title: t('tabs.home'),
-          tabBarLabel: t('tabs.home'),
-          tabBarIcon: ({ focused }) => ({
-            type: 'sfSymbol',
-            name: focused ? 'house.fill' : 'house',
-          }),
-        }}
-      />
-      <NativeTab.Screen
-        name="Thèmes"
-        component={ThemesScreen}
-        options={{
-          title: t('tabs.themes'),
-          tabBarLabel: t('tabs.themes'),
-          tabBarIcon: ({ focused }) => ({
-            type: 'sfSymbol',
-            name: focused ? 'square.grid.2x2.fill' : 'square.grid.2x2',
-          }),
-        }}
-      />
-      <NativeTab.Screen
-        name="Discussions"
-        component={DiscussionsScreen}
-        options={{
-          title: t('tabs.discussions'),
-          tabBarLabel: t('tabs.discussions'),
-          tabBarIcon: ({ focused }) => ({
-            type: 'sfSymbol',
-            name: focused ? 'bubble.left.and.bubble.right.fill' : 'bubble.left.and.bubble.right',
-          }),
-        }}
-      />
-      <NativeTab.Screen
-        name="Abonnements"
-        component={SubscriptionsScreen}
-        options={{
-          title: t('tabs.subscriptions'),
-          tabBarLabel: t('tabs.subscriptions'),
-          tabBarIcon: ({ focused }) => ({
-            type: 'sfSymbol',
-            name: focused ? 'safari.fill' : 'safari',
-          }),
-        }}
-      />
-      <NativeTab.Screen
-        name="Paramètres"
-        component={SettingsScreen}
-        options={{
-          title: t('tabs.settings'),
-          tabBarLabel: t('tabs.settings'),
-          tabBarIcon: ({ focused }) => ({
-            type: 'sfSymbol',
-            name: focused ? 'gearshape.fill' : 'gearshape',
-          }),
-        }}
-      />
-    </NativeTab.Navigator>
+    <View>
+      <BottomAdStrip />
+      <BottomTabBar {...props} />
+    </View>
   );
 }
 
-function JsBottomTabs() {
+export function RootTabs() {
   const { palette } = useAppSettings();
   const { t } = useTranslation();
+  const { width, height } = useWindowDimensions();
+  const vertical = shouldExpectVerticalSystemBars(width, height);
+
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      lazy: true,
+      freezeOnBlur: true,
+      tabBarActiveTintColor: palette.accent,
+      tabBarInactiveTintColor: palette.textMuted,
+      // Duo outer (squat) + inner landscape → barre latérale (trailing / droite).
+      tabBarPosition: (vertical ? 'right' : 'bottom') as 'right' | 'bottom',
+      tabBarVariant: (vertical ? 'material' : 'uikit') as 'material' | 'uikit',
+      tabBarLabelPosition: (vertical ? 'below-icon' : undefined) as
+        | 'below-icon'
+        | undefined,
+      tabBarStyle: {
+        backgroundColor: palette.surface,
+        borderTopColor: palette.border,
+        ...(vertical
+          ? {
+              borderTopColor: 'transparent',
+              borderLeftColor: palette.border,
+              borderLeftWidth: 1,
+              minWidth: 72,
+            }
+          : null),
+      },
+    }),
+    [palette, vertical],
+  );
 
   return (
-    <JsTab.Navigator
-      tabBar={(props) => (
-        <View>
-          <BottomAdStrip />
-          <BottomTabBar {...props} />
-        </View>
-      )}
-      screenOptions={{
-        headerShown: false,
-        lazy: true,
-        freezeOnBlur: true,
-        tabBarActiveTintColor: palette.accent,
-        tabBarInactiveTintColor: palette.textMuted,
-        tabBarStyle: {
-          backgroundColor: palette.surface,
-          borderTopColor: palette.border,
-        },
-      }}
-    >
-      <JsTab.Screen
+    <Tab.Navigator tabBar={DuoAwareTabBar} screenOptions={screenOptions}>
+      <Tab.Screen
         name="Accueil"
         component={HomeScreen}
         options={{
@@ -148,7 +93,7 @@ function JsBottomTabs() {
           ),
         }}
       />
-      <JsTab.Screen
+      <Tab.Screen
         name="Thèmes"
         component={ThemesScreen}
         options={{
@@ -158,7 +103,7 @@ function JsBottomTabs() {
           ),
         }}
       />
-      <JsTab.Screen
+      <Tab.Screen
         name="Discussions"
         component={DiscussionsScreen}
         options={{
@@ -168,7 +113,7 @@ function JsBottomTabs() {
           ),
         }}
       />
-      <JsTab.Screen
+      <Tab.Screen
         name="Abonnements"
         component={SubscriptionsScreen}
         options={{
@@ -178,7 +123,7 @@ function JsBottomTabs() {
           ),
         }}
       />
-      <JsTab.Screen
+      <Tab.Screen
         name="Paramètres"
         component={SettingsScreen}
         options={{
@@ -188,10 +133,6 @@ function JsBottomTabs() {
           ),
         }}
       />
-    </JsTab.Navigator>
+    </Tab.Navigator>
   );
-}
-
-export function RootTabs() {
-  return useNativeIosTabs ? <NativeIosTabs /> : <JsBottomTabs />;
 }
